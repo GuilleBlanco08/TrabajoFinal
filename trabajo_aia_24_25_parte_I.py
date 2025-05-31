@@ -13,12 +13,12 @@
 # Autor(a) del trabajo:
 #
 # APELLIDOS: BLANCO DÍAZ
-# NOMBRE: GUILLERMO
+# NOMBRE: GUILLERMO 
 #
 # Segundo(a) componente (si se trata de un grupo):
 #
-# APELLIDOS:
-# NOMBRE:
+# APELLIDOS: 
+# NOMBRE: ENRIQUE 
 # ----------------------------------------------------------------------------
 
 
