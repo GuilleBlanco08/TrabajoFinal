@@ -242,23 +242,127 @@ from carga_datos import *
 #  array([81, 91, 88]))
 # ------------------------------------------------------------------
 
+import numpy as np
 
+def particion_entr_prueba(X, y, test=0.20):
+    """
+    Separa aleatoriamente (estratificado respecto a y) el conjunto (X, y)
+    en dos particiones: entrenamiento y prueba.
+    
+    Parámetros:
+    -----------
+    X : np.ndarray de forma (n_ejemplos, n_atributos)
+        Matriz de datos.
+    y : np.ndarray de forma (n_ejemplos,)
+        Vector de etiquetas (pueden ser ints o strings).
+    test : float (0 < test < 1)
+        Fracción del total que irá a la partición de prueba
+        (ejemplo: 0.20 → 20% en prueba, 80% en entrenamiento).
+        
+    Devuelve:
+    ---------
+    X_ent, X_pru, y_ent, y_pru : np.ndarray
+        Los cuatro arrays resultantes en el orden:
+          - X_ent (n_ent × m)
+          - X_pru (n_pru × m)
+          - y_ent (n_ent,)
+          - y_pru (n_pru,)
+    """
+    # 1) Comprobación de dimensiones
+    n_total = X.shape[0]
+    if y.shape[0] != n_total:
+        raise ValueError("X e y deben tener el mismo número de filas.")
 
+    # 2) Sacar las clases únicas y sus recuentos
+    clases_unicas, cuentas_por_clase = np.unique(y, return_counts=True)
+    # Ejemplo: clases_unicas = array(['democrata','republicano']),
+    #          cuentas_por_clase = array([267, 168])
 
+    # 3) Lists para ir acumulando índices de cada partición
+    indices_ent = []  # índices que irán a entrenamiento
+    indices_pru = []  # índices que irán a prueba
 
+    # 4) Iterar por cada clase para repartir estratificadamente
+    for idx_clase, c in enumerate(clases_unicas):
+        # 4.1) Indices de todos los ejemplos de la clase c
+        #     np.where(y == c) devuelve una tupla, tomamos [0] para el array.
+        indices_clase = np.where(y == c)[0].copy()
+        
+        # 4.2) Barajar (aleatorizar) esos índices
+        np.random.shuffle(indices_clase)
 
+        # 4.3) Calcular cuántos van a la partición de prueba para esta clase
+        cuenta_c = cuentas_por_clase[idx_clase]
+        n_pru_c = int(np.round(cuenta_c * test))
+        # Ejemplo: si cuenta_c = 168 y test = 1/3 ≈ 0.3333 → n_pru_c ≈ 56
 
+        # 4.4) Repartir los índices: primeros n_pru_c a prueba, el resto a entrenamiento
+        indices_pru_c = indices_clase[:n_pru_c]
+        indices_ent_c = indices_clase[n_pru_c:]
 
+        # 4.5) Agregar a las listas generales
+        indices_pru.extend(indices_pru_c.tolist())
+        indices_ent.extend(indices_ent_c.tolist())
 
+    # 5) Convertir a arrays y volver a mezclar cada lista por separado
+    indices_ent = np.array(indices_ent)
+    indices_pru = np.array(indices_pru)
 
+    np.random.shuffle(indices_ent)
+    np.random.shuffle(indices_pru)
 
+    # 6) Indexar X e y para obtener los cuatro arrays finales
+    X_ent = X[indices_ent]
+    y_ent = y[indices_ent]
 
+    X_pru = X[indices_pru]
+    y_pru = y[indices_pru]
 
+    # 7) Comprobación final (opcional, pero útil para depurar)
+    #    Nos aseguramos de que no hay índices duplicados y que suman n_total.
+    if len(indices_ent) + len(indices_pru) != n_total:
+        raise RuntimeError("Faltan o sobran ejemplos después de la partición.")
+    if set(indices_ent).intersection(set(indices_pru)):
+        raise RuntimeError("Hay índices duplicados entre entrenamiento y prueba.")
 
+    return X_ent, X_pru, y_ent, y_pru
 
+from carga_datos import X_votos, y_votos, X_cancer, y_cancer
+import numpy as np
 
+# --- Prueba con el dataset de "votos" (435 instancias, clases: 'democrata' y 'republicano') ---
+Xe_votos, Xp_votos, ye_votos, yp_votos = particion_entr_prueba(X_votos, y_votos, test=0.2)
 
+# Comprobamos recuentos originales
+print("Total votos - Clases (original):",
+      np.unique(y_votos, return_counts=True))
+# Ejemplo de salida esperada: (array(['democrata','republicano']), array([267,168]))
 
+# Comprobamos recuentos en entrenamiento y en prueba
+print("Entrenamiento - Clases:",
+      np.unique(ye_votos, return_counts=True))
+print("Prueba        - Clases:",
+      np.unique(yp_votos, return_counts=True))
+
+# Salida esperada (aprox.):
+# Entrenamiento - Clases: (array(['democrata','republicano']), array([178,112]))
+# Prueba        - Clases: (array(['democrata','republicano']), array([89,56]))
+
+# --- Prueba con el dataset de "cáncer" (569 instancias, clases: 0 y 1) ---
+Xev_cancer, Xp_cancer, yev_cancer, yp_cancer = particion_entr_prueba(X_cancer, y_cancer, test=0.20)
+
+print("Total cáncer - Clases (original):",
+      np.unique(y_cancer, return_counts=True))
+# Ejemplo: (array([0,1]), array([212,357]))
+
+print("Entrenamiento - Clases:",
+      np.unique(yev_cancer, return_counts=True))
+print("Prueba        - Clases:",
+      np.unique(yp_cancer, return_counts=True))
+
+# Salida esperada (aprox.):
+# Entrenamiento - Clases: (array([0,1]), array([170,286]))
+# Prueba        - Clases: (array([0,1]), array([42, 71]))
 
 
 # ===============================================
