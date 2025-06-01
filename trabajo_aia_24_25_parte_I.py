@@ -242,8 +242,6 @@ from carga_datos import *
 #  array([81, 91, 88]))
 # ------------------------------------------------------------------
 
-import numpy as np
-
 def particion_entr_prueba(X, y, test=0.20):
     """
     Separa aleatoriamente (estratificado respecto a y) el conjunto (X, y)
@@ -318,52 +316,7 @@ def particion_entr_prueba(X, y, test=0.20):
     X_pru = X[indices_pru]
     y_pru = y[indices_pru]
 
-    # 7) Comprobación final (opcional, pero útil para depurar)
-    #    Nos aseguramos de que no hay índices duplicados y que suman n_total.
-    if len(indices_ent) + len(indices_pru) != n_total:
-        raise RuntimeError("Faltan o sobran ejemplos después de la partición.")
-    if set(indices_ent).intersection(set(indices_pru)):
-        raise RuntimeError("Hay índices duplicados entre entrenamiento y prueba.")
-
     return X_ent, X_pru, y_ent, y_pru
-
-from carga_datos import X_votos, y_votos, X_cancer, y_cancer
-import numpy as np
-
-# --- Prueba con el dataset de "votos" (435 instancias, clases: 'democrata' y 'republicano') ---
-Xe_votos, Xp_votos, ye_votos, yp_votos = particion_entr_prueba(X_votos, y_votos, test=0.2)
-
-# Comprobamos recuentos originales
-print("Total votos - Clases (original):",
-      np.unique(y_votos, return_counts=True))
-# Ejemplo de salida esperada: (array(['democrata','republicano']), array([267,168]))
-
-# Comprobamos recuentos en entrenamiento y en prueba
-print("Entrenamiento - Clases:",
-      np.unique(ye_votos, return_counts=True))
-print("Prueba        - Clases:",
-      np.unique(yp_votos, return_counts=True))
-
-# Salida esperada (aprox.):
-# Entrenamiento - Clases: (array(['democrata','republicano']), array([178,112]))
-# Prueba        - Clases: (array(['democrata','republicano']), array([89,56]))
-
-# --- Prueba con el dataset de "cáncer" (569 instancias, clases: 0 y 1) ---
-Xev_cancer, Xp_cancer, yev_cancer, yp_cancer = particion_entr_prueba(X_cancer, y_cancer, test=0.20)
-
-print("Total cáncer - Clases (original):",
-      np.unique(y_cancer, return_counts=True))
-# Ejemplo: (array([0,1]), array([212,357]))
-
-print("Entrenamiento - Clases:",
-      np.unique(yev_cancer, return_counts=True))
-print("Prueba        - Clases:",
-      np.unique(yp_cancer, return_counts=True))
-
-# Salida esperada (aprox.):
-# Entrenamiento - Clases: (array([0,1]), array([170,286]))
-# Prueba        - Clases: (array([0,1]), array([42, 71]))
-
 
 # ===============================================
 # EJERCICIO 2: IMPLEMENTACIÓN ÁRBOLES DE DECISIÓN
@@ -774,21 +727,276 @@ def rendimiento(clasif,X,y):
 # 0.9557522123893806
 
 
+# Función auxiliar para calcular entropía en base 2:
+def entropia(y_sub):
+    """
+    Calcula la entropía de un vector de etiquetas y_sub (1D), usando base 2:
+        H = -∑ p_c · log2(p_c),
+    donde p_c = (#ejemplos de clase c) / (total de ejemplos en y_sub).
+    Ignora probabilidades p_c == 0 para evitar log2(0).
+    """
+    clases_sub, cuentas_sub = np.unique(y_sub, return_counts=True)
+    if cuentas_sub.size == 0:
+        return 0.0
+    p = cuentas_sub.astype(float) / cuentas_sub.sum()
+    p = p[p > 0]
+    return -np.sum(p * np.log2(p))
 
 
+class ArbolDecision:
+    def __init__(self, min_ejemplos_nodo_interior=5, max_prof=10, n_atrs=10, prop_umbral=1.0):
+        """
+        Constructor del árbol de decisión.
 
+        Parámetros:
+        -----------
+        min_ejemplos_nodo_interior : int
+            Número mínimo de ejemplos que debe tener un nodo para que se intente dividirlo.
+            Si en un nodo llegan menos de este umbral, se convierte en hoja inmediatamente.
+        max_prof : int
+            Profundidad máxima permitida. Si la llamada recursiva alcanza prof ≥ max_prof,
+            el nodo se convierte en hoja.
+        n_atrs : int
+            Número de atributos (columnas) que se seleccionarán aleatoriamente al principio del
+            entrenamiento y que se usarán en TODO el árbol. Si n_atrs ≥ número de columnas
+            de X, se usan todas las columnas.
+        prop_umbral : float
+            Proporción (0 < prop_umbral ≤ 1) de ejemplos de cada nodo que se usarán para
+            hallar candidatos de umbral. Ejemplo: prop_umbral=0.7 en un nodo con 200 ejemplos
+            usa 140 aleatorios para generar “cortes” candidatos de ese atributo.
+        """
+        self.min_ejemplos_nodo_interior = min_ejemplos_nodo_interior
+        self.max_prof                  = max_prof
+        self.n_atrs                    = n_atrs
+        self.prop_umbral               = prop_umbral
 
+        # Hasta que se entrene, self.raiz queda en None:
+        self.raiz = None
 
+        # Aquí guardaremos el array de índices de atributos candidatos (subconjunto aleatorio).
+        self.atributos_candidatos = None
 
+    def entrena(self, X, y):
+        """
+        Entrena el árbol de decisión con los datos (X, y).
 
+        Pasos:
+        1) Obtener m = número total de columnas (atributos) en X.
+        2) Si n_atrs < m, sortear n_atrs índices de columna (0..m-1) sin reemplazo
+           y guardarlos en self.atributos_candidatos. Si n_atrs ≥ m, usar todos los atributos.
+        3) Llamar recursivamente a _construye_arbol_rec(X, y, prof=0) y guardar la raíz en self.raiz.
+        """
+        n_ejemplos, n_atributos_totales = X.shape
 
+        if self.n_atrs < n_atributos_totales:
+            self.atributos_candidatos = np.random.choice(
+                a       = n_atributos_totales,
+                size    = self.n_atrs,
+                replace = False
+            )
+        else:
+            self.atributos_candidatos = np.arange(n_atributos_totales)
 
+        # Construcción recursiva de todo el árbol:
+        self.raiz = self._construye_arbol_rec(X, y, prof=0)
 
+    def _construye_arbol_rec(self, X_n, y_n, prof):
+        """
+        Construye recursivamente un nodo (hoja o interior) del árbol.
+        Parámetros:
+          - X_n : array numpy de forma (n_nodo, m), subconjunto de ejemplos en el nodo.
+          - y_n : array numpy de forma (n_nodo,), etiquetas correspondientes a X_n.
+          - prof: int, profundidad actual del nodo (0 = raíz).
+        Retorna:
+          - Un objeto Nodo, que puede ser hoja o nodo interior con atributo/umbral.
+        """
 
+        # 1) Calculamos distribución de clases en este nodo (para hoja o para calculo de distr).
+        clases_sub, cuentas_sub = np.unique(y_n, return_counts=True)
+        dict_distr_padre = {clase: int(cuenta) for clase, cuenta in zip(clases_sub, cuentas_sub)}
 
+        # 2) Condiciones de parada (creación de hoja):
+        #    a) prof ≥ max_prof
+        #    b) len(y_n) < min_ejemplos_nodo_interior
+        #    c) todas las etiquetas de y_n son iguales (pureza total)
+        if (prof >= self.max_prof) or (len(y_n) < self.min_ejemplos_nodo_interior) or (clases_sub.size == 1):
+            idx_mayor = np.argmax(cuentas_sub)
+            clase_mayoritaria = clases_sub[idx_mayor]
+            return Nodo(
+                atributo = None,
+                umbral   = None,
+                izq      = None,
+                der      = None,
+                distr    = dict_distr_padre,
+                clase    = clase_mayoritaria
+            )
 
+        # 3) Si no paramos, buscamos el MEJOR atributo A y umbral u que maximicen la ganancia de información
+        mejor_gain   = -np.inf
+        mejor_A      = None
+        mejor_umbral = None
+        H_padre      = entropia(y_n)
 
+        # 4) Para cada atributo candidato (subconjunto sorteado en entrena()):
+        for A in self.atributos_candidatos:
+            n_nodo = X_n.shape[0]
+            # 4.1) Submuestreo de ejemplos para hallar candidatos de umbral:
+            k = max(1, int(np.round(self.prop_umbral * n_nodo)))
+            indices_muestra = np.random.choice(n_nodo, size=k, replace=False)
 
+            Xm = X_n[indices_muestra, A]
+            ym = y_n[indices_muestra]
+
+            # 4.2) Ordenar la muestra por valor de Xm para detectar cambios de clase vecinos
+            orden_muestra = np.argsort(Xm)
+            Xm_orden = Xm[orden_muestra]
+            ym_orden = ym[orden_muestra]
+
+            # 4.3) Construir lista de umbrales candidatos: puntos medios donde cambia la clase
+            umbrales_A = []
+            for i in range(len(Xm_orden) - 1):
+                if ym_orden[i] != ym_orden[i + 1]:
+                    u = (Xm_orden[i] + Xm_orden[i + 1]) / 2.0
+                    umbrales_A.append(u)
+
+            if len(umbrales_A) == 0:
+                continue  # No hay cambio de clase en la muestra → ningún candidato para este atributo
+
+            # 4.4) Para cada candidato u, calculamos la ganancia de información
+            for u in umbrales_A:
+                mask_izq = (X_n[:, A] <= u)
+                mask_der = ~mask_izq
+                if (np.sum(mask_izq) == 0) or (np.sum(mask_der) == 0):
+                    continue  # Split inválido (alguna rama vacía)
+
+                y_izq = y_n[mask_izq]
+                y_der = y_n[mask_der]
+
+                H_izq = entropia(y_izq)
+                H_der = entropia(y_der)
+
+                N_nodo = len(y_n)
+                N_izq  = len(y_izq)
+                N_der  = len(y_der)
+
+                H_hijos = (N_izq / N_nodo) * H_izq + (N_der / N_nodo) * H_der
+                gain    = H_padre - H_hijos
+
+                if gain > mejor_gain:
+                    mejor_gain   = gain
+                    mejor_A      = int(A)
+                    mejor_umbral = float(u)
+
+        # 5) Si no encontramos ningún split con ganancia positiva, devolvemos un nodo hoja
+        if (mejor_A is None) or (mejor_gain <= 0):
+            idx_mayor = np.argmax(cuentas_sub)
+            clase_mayoritaria = clases_sub[idx_mayor]
+            return Nodo(
+                atributo = None,
+                umbral   = None,
+                izq      = None,
+                der      = None,
+                distr    = dict_distr_padre,
+                clase    = clase_mayoritaria
+            )
+
+        # 6) Si sí hay mejor_A y mejor_umbral, particionamos todo el conjunto (X_n, y_n)
+        mask_split = (X_n[:, mejor_A] <= mejor_umbral)
+        X_izq, y_izq = X_n[mask_split],    y_n[mask_split]
+        X_der, y_der = X_n[~mask_split],   y_n[~mask_split]
+
+        # Llamadas recursivas a la izquierda y a la derecha (prof + 1)
+        nodo_izq = self._construye_arbol_rec(X_izq, y_izq, prof + 1)
+        nodo_der = self._construye_arbol_rec(X_der, y_der, prof + 1)
+
+        # Devolvemos un nodo interior con el atributo y umbral seleccionados
+        return Nodo(
+            atributo = mejor_A,
+            umbral   = mejor_umbral,
+            izq      = nodo_izq,
+            der      = nodo_der,
+            distr    = dict_distr_padre,
+            clase    = None
+        )
+
+    def clasifica(self, X):
+        """
+        Clasifica un array X (N × m) y devuelve un array de longitud N con las predicciones.
+        Si self.raiz es None (no se ha entrenado), lanza ClasificadorNoEntrenado.
+        """
+        if self.raiz is None:
+            raise ClasificadorNoEntrenado("El árbol no ha sido entrenado aún.")
+
+        n_ejemplos = X.shape[0]
+        preds = np.empty(shape=(n_ejemplos,), dtype=object)
+
+        for i in range(n_ejemplos):
+            nodo = self.raiz
+            # Descender por el árbol hasta llegar a una hoja
+            while not nodo.es_hoja():
+                if X[i, nodo.atributo] <= nodo.umbral:
+                    nodo = nodo.izq
+                else:
+                    nodo = nodo.der
+            preds[i] = nodo.clase
+
+        return preds
+
+    def clasifica_prob(self, x):
+        """
+        Clasifica un único ejemplo x (vector 1D de longitud m).
+        Devuelve un dict {clase_i: probabilidad_i}, usando la distribución en la hoja.
+        Si self.raiz es None, lanza ClasificadorNoEntrenado.
+        """
+        if self.raiz is None:
+            raise ClasificadorNoEntrenado("El árbol no ha sido entrenado aún.")
+
+        nodo = self.raiz
+        while not nodo.es_hoja():
+            if x[nodo.atributo] <= nodo.umbral:
+                nodo = nodo.izq
+            else:
+                nodo = nodo.der
+
+        dist = nodo.distr
+        total = sum(dist.values())
+        return {clase: cuenta / total for clase, cuenta in dist.items()}
+
+    def imprime_arbol(self, nombre_atrs, nombre_clase):
+        """
+        Imprime en consola un dibujo textual del árbol entrenado.
+        Parámetros:
+          - nombre_atrs : lista de strings con el nombre de cada columna de X.
+          - nombre_clase: string con el nombre de la variable objetivo.
+        Si self.raiz es None, lanza ClasificadorNoEntrenado.
+        """
+        if self.raiz is None:
+            raise ClasificadorNoEntrenado("El árbol no ha sido entrenado aún.")
+        self._imprime_nodo(self.raiz, prof=0, nombre_atrs=nombre_atrs, nombre_clase=nombre_clase)
+
+    def _imprime_nodo(self, nodo, prof, nombre_atrs, nombre_clase):
+        """
+        Función auxiliar recursiva que imprime cada nodo con indentación.
+        - Si nodo.es_hoja(): imprime 
+            "<espacios><nombre_clase>: <etiqueta_mayoritaria> -- {distr}"
+        - Si no, imprime 
+            "<espacios><atributo> <= <umbral>"
+            (hijo izquierdo)
+            "<espacios><atributo> > <umbral>"
+            (hijo derecho)
+        donde espacios = "    " * prof.
+        """
+        espacios = "    " * prof
+
+        if nodo.es_hoja():
+            print(f"{espacios}{nombre_clase}: {nodo.clase} -- {nodo.distr}")
+        else:
+            atr = nombre_atrs[nodo.atributo]
+            um  = nodo.umbral
+            print(f"{espacios}{atr} <= {um:.3f}")
+            self._imprime_nodo(nodo.izq, prof + 1, nombre_atrs, nombre_clase)
+            print(f"{espacios}{atr} > {um:.3f}")
+            self._imprime_nodo(nodo.der, prof + 1, nombre_atrs, nombre_clase)
 
 
 
@@ -1043,87 +1251,87 @@ import pandas as pd
 
 # *********** DESCOMENTAR A PARTIR DE AQUÍ
 
-# print("************ PRUEBAS EJERCICIO 1:")
-# print("**********************************\n")
-# Xe_votos,Xp_votos,ye_votos,yp_votos=particion_entr_prueba(X_votos,y_votos,test=1/3)
-# print("Partición votos: ",y_votos.shape[0],ye_votos.shape[0],yp_votos.shape[0])
-# print("Proporción original en votos: ",np.unique(y_votos,return_counts=True))
-# print("Estratificación entrenamiento en votos: ",np.unique(ye_votos,return_counts=True))
-# print("Estratificación prueba en votos: ",np.unique(yp_votos,return_counts=True))
-# print("\n")
+print("************ PRUEBAS EJERCICIO 1:")
+print("**********************************\n")
+Xe_votos,Xp_votos,ye_votos,yp_votos=particion_entr_prueba(X_votos,y_votos,test=1/3)
+print("Partición votos: ",y_votos.shape[0],ye_votos.shape[0],yp_votos.shape[0])
+print("Proporción original en votos: ",np.unique(y_votos,return_counts=True))
+print("Estratificación entrenamiento en votos: ",np.unique(ye_votos,return_counts=True))
+print("Estratificación prueba en votos: ",np.unique(yp_votos,return_counts=True))
+print("\n")
 
-# Xev_cancer,Xp_cancer,yev_cancer,yp_cancer=particion_entr_prueba(X_cancer,y_cancer,test=0.2)
-# print("Proporción original en cáncer: ", np.unique(y_cancer,return_counts=True))
-# print("Estratificación entr-val en cáncer: ",np.unique(yev_cancer,return_counts=True))
-# print("Estratificación prueba en cáncer: ",np.unique(yp_cancer,return_counts=True))
-# Xe_cancer,Xv_cancer,ye_cancer,yv_cancer=particion_entr_prueba(Xev_cancer,yev_cancer,test=0.2)
-# print("Estratificación entrenamiento cáncer: ", np.unique(ye_cancer,return_counts=True))
-# print("Estratificación validación cáncer: ",np.unique(yv_cancer,return_counts=True))
-# print("\n")
+Xev_cancer,Xp_cancer,yev_cancer,yp_cancer=particion_entr_prueba(X_cancer,y_cancer,test=0.2)
+print("Proporción original en cáncer: ", np.unique(y_cancer,return_counts=True))
+print("Estratificación entr-val en cáncer: ",np.unique(yev_cancer,return_counts=True))
+print("Estratificación prueba en cáncer: ",np.unique(yp_cancer,return_counts=True))
+Xe_cancer,Xv_cancer,ye_cancer,yv_cancer=particion_entr_prueba(Xev_cancer,yev_cancer,test=0.2)
+print("Estratificación entrenamiento cáncer: ", np.unique(ye_cancer,return_counts=True))
+print("Estratificación validación cáncer: ",np.unique(yv_cancer,return_counts=True))
+print("\n")
 
-# Xe_credito,Xp_credito,ye_credito,yp_credito=particion_entr_prueba(X_credito,y_credito,test=0.4)
-# print("Estratificación entrenamiento crédito: ",np.unique(ye_credito,return_counts=True))
-# print("Estratificación prueba crédito: ",np.unique(yp_credito,return_counts=True))
-# print("\n\n\n")
-
-
-
-
-
-# print("************ PRUEBAS EJERCICIO 2:")
-# print("**********************************\n")
-
-# clf_titanic = ArbolDecision(max_prof=3,min_ejemplos_nodo_interior=5,n_atrs=3)
-# clf_titanic.entrena(X_train_titanic, y_train_titanic)
-# clf_titanic.imprime_arbol(["Pclass", "Mujer", "Edad"],"Partido")
-# rend_train_titanic = rendimiento(clf_titanic,X_train_titanic,y_train_titanic)
-# rend_test_titanic = rendimiento(clf_titanic,X_test_titanic,y_test_titanic)
-# print(f"****** Rendimiento DT titanic train: {rend_train_titanic}")
-# print(f"****** Rendimiento DT titanic test: {rend_test_titanic}\n\n\n\n ")
-
-
-
-
-# clf_votos = ArbolDecision(min_ejemplos_nodo_interior=3,max_prof=5,n_atrs=16)
-# clf_votos.entrena(Xe_votos, ye_votos)
-# nombre_atrs_votos=[f"Votación {i}" for i in range(1,17)]
-# clf_votos.imprime_arbol(nombre_atrs_votos,"Partido")
-# rend_train_votos = rendimiento(clf_votos,Xe_votos,ye_votos)
-# rend_test_votos = rendimiento(clf_votos,Xp_votos,yp_votos)
-# print(f"****** Rendimiento DT votos en train: {rend_train_votos}")
-# print(f"****** Rendimiento DT votos en test:  {rend_test_votos}\n\n\n\n")
-
-
-
-# clf_iris = ArbolDecision(max_prof=3,n_atrs=4)
-# clf_iris.entrena(X_train_iris, y_train_iris)
-# clf_iris.imprime_arbol(["Long. Sépalo", "Anch. Sépalo", "Long. Pétalo", "Anch. Pétalo"],"Clase")
-# rend_train_iris = rendimiento(clf_iris,X_train_iris,y_train_iris)
-# rend_test_iris = rendimiento(clf_iris,X_test_iris,y_test_iris)
-# print(f"********************* Rendimiento DT iris train: {rend_train_iris}")
-# print(f"********************* Rendimiento DT iris test: {rend_test_iris}\n\n\n\n ")
+Xe_credito,Xp_credito,ye_credito,yp_credito=particion_entr_prueba(X_credito,y_credito,test=0.4)
+print("Estratificación entrenamiento crédito: ",np.unique(ye_credito,return_counts=True))
+print("Estratificación prueba crédito: ",np.unique(yp_credito,return_counts=True))
+print("\n\n\n")
 
 
 
 
 
-# clf_cancer = ArbolDecision(min_ejemplos_nodo_interior=3,max_prof=10,n_atrs=15)
-# clf_cancer.entrena(Xev_cancer, yev_cancer)
-# nombre_atrs_cancer=['mean radius', 'mean texture', 'mean perimeter', 'mean area',
-#         'mean smoothness', 'mean compactness', 'mean concavity',
-#         'mean concave points', 'mean symmetry', 'mean fractal dimension',
-#         'radius error', 'texture error', 'perimeter error', 'area error',
-#         'smoothness error', 'compactness error', 'concavity error',
-#         'concave points error', 'symmetry error',
-#         'fractal dimension error', 'worst radius', 'worst texture',
-#         'worst perimeter', 'worst area', 'worst smoothness',
-#         'worst compactness', 'worst concavity', 'worst concave points',
-#         'worst symmetry', 'worst fractal dimension']
-# clf_cancer.imprime_arbol(nombre_atrs_cancer,"Es benigno")
-# rend_train_cancer = rendimiento(clf_cancer,Xev_cancer,yev_cancer)
-# rend_test_cancer = rendimiento(clf_cancer,Xp_cancer,yp_cancer)
-# print(f"***** Rendimiento DT cancer en train: {rend_train_cancer}")
-# print(f"***** Rendimiento DT cancer en test: {rend_test_cancer}\n\n\n")
+print("************ PRUEBAS EJERCICIO 2:")
+print("**********************************\n")
+
+clf_titanic = ArbolDecision(max_prof=3,min_ejemplos_nodo_interior=5,n_atrs=3)
+clf_titanic.entrena(X_train_titanic, y_train_titanic)
+clf_titanic.imprime_arbol(["Pclass", "Mujer", "Edad"],"Partido")
+rend_train_titanic = rendimiento(clf_titanic,X_train_titanic,y_train_titanic)
+rend_test_titanic = rendimiento(clf_titanic,X_test_titanic,y_test_titanic)
+print(f"****** Rendimiento DT titanic train: {rend_train_titanic}")
+print(f"****** Rendimiento DT titanic test: {rend_test_titanic}\n\n\n\n ")
+
+
+
+
+clf_votos = ArbolDecision(min_ejemplos_nodo_interior=3,max_prof=5,n_atrs=16)
+clf_votos.entrena(Xe_votos, ye_votos)
+nombre_atrs_votos=[f"Votación {i}" for i in range(1,17)]
+clf_votos.imprime_arbol(nombre_atrs_votos,"Partido")
+rend_train_votos = rendimiento(clf_votos,Xe_votos,ye_votos)
+rend_test_votos = rendimiento(clf_votos,Xp_votos,yp_votos)
+print(f"****** Rendimiento DT votos en train: {rend_train_votos}")
+print(f"****** Rendimiento DT votos en test:  {rend_test_votos}\n\n\n\n")
+
+
+
+clf_iris = ArbolDecision(max_prof=3,n_atrs=4)
+clf_iris.entrena(X_train_iris, y_train_iris)
+clf_iris.imprime_arbol(["Long. Sépalo", "Anch. Sépalo", "Long. Pétalo", "Anch. Pétalo"],"Clase")
+rend_train_iris = rendimiento(clf_iris,X_train_iris,y_train_iris)
+rend_test_iris = rendimiento(clf_iris,X_test_iris,y_test_iris)
+print(f"********************* Rendimiento DT iris train: {rend_train_iris}")
+print(f"********************* Rendimiento DT iris test: {rend_test_iris}\n\n\n\n ")
+
+
+
+
+
+clf_cancer = ArbolDecision(min_ejemplos_nodo_interior=3,max_prof=10,n_atrs=15)
+clf_cancer.entrena(Xev_cancer, yev_cancer)
+nombre_atrs_cancer=['mean radius', 'mean texture', 'mean perimeter', 'mean area',
+        'mean smoothness', 'mean compactness', 'mean concavity',
+        'mean concave points', 'mean symmetry', 'mean fractal dimension',
+        'radius error', 'texture error', 'perimeter error', 'area error',
+        'smoothness error', 'compactness error', 'concavity error',
+        'concave points error', 'symmetry error',
+        'fractal dimension error', 'worst radius', 'worst texture',
+        'worst perimeter', 'worst area', 'worst smoothness',
+        'worst compactness', 'worst concavity', 'worst concave points',
+        'worst symmetry', 'worst fractal dimension']
+clf_cancer.imprime_arbol(nombre_atrs_cancer,"Es benigno")
+rend_train_cancer = rendimiento(clf_cancer,Xev_cancer,yev_cancer)
+rend_test_cancer = rendimiento(clf_cancer,Xp_cancer,yp_cancer)
+print(f"***** Rendimiento DT cancer en train: {rend_train_cancer}")
+print(f"***** Rendimiento DT cancer en test: {rend_test_cancer}\n\n\n")
 
 
 
