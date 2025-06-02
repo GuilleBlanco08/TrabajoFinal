@@ -1006,11 +1006,6 @@ class ArbolDecision:
 
 
 
-
-
-
-
-
 # =============================================
 # EJERCICIO 3: IMPLEMENTACIÓN DE RANDOM FORESTS
 # =============================================
@@ -1078,26 +1073,112 @@ class ArbolDecision:
 
 #------------------------------------------------------------------------------
 
+class RandomForest:
+    def __init__(self, n_arboles=5, prop_muestras=1.0,
+                 min_ejemplos_nodo_interior=5, max_prof=10, n_atrs=10, prop_umbral=1.0):
+        """
+        Constructor del clasificador Random Forest.
 
+        Parámetros:
+        -----------
+        n_arboles : int
+            Número de árboles en el bosque.
+        prop_muestras : float (0 < prop_muestras ≤ 1)
+            Proporción de ejemplos del conjunto de entrenamiento original que se
+            seleccionarán (con reemplazo) para entrenar cada árbol (bootstrap).
+        min_ejemplos_nodo_interior : int
+            Se pasa a cada ArbolDecision: número mínimo de ejemplos para dividir un nodo.
+        max_prof : int
+            Se pasa a cada ArbolDecision: profundidad máxima del árbol.
+        n_atrs : int
+            Se pasa a cada ArbolDecision: número de atributos candidatos por árbol.
+        prop_umbral : float (0 < prop_umbral ≤ 1)
+            Se pasa a cada ArbolDecision: proporción de ejemplos a usar en cada nodo
+            para generar candidatos de umbral.
+        """
+        self.n_arboles = n_arboles
+        self.prop_muestras = prop_muestras
+        self.min_ejemplos_nodo_interior = min_ejemplos_nodo_interior
+        self.max_prof = max_prof
+        self.n_atrs = n_atrs
+        self.prop_umbral = prop_umbral
 
+        # Lista donde guardaremos cada árbol entrenado
+        self.arboles = []
 
+    def entrena(self, X, y):
+        """
+        Entrena el Random Forest sobre los datos (X, y). Por cada uno de los n_arboles:
+          1) Crear un bootstrap sample de X, y con reemplazo, de tamaño n_bootstrap = round(prop_muestras * n_total).
+          2) Instanciar un ArbolDecision con los hiperparámetros dados.
+          3) Entrenar ese árbol sobre el bootstrap sample.
+          4) Guardar el árbol entrenado en self.arboles.
+        """
+        n_total = X.shape[0]
+        # Número de ejemplos en cada bootstrap
+        n_bootstrap = max(1, int(round(self.prop_muestras * n_total)))
 
+        self.arboles = []
+        for _ in range(self.n_arboles):
+            # 1) Muestreo con reemplazo: índices aleatorios de tamaño n_bootstrap
+            idxs = np.random.choice(n_total, size=n_bootstrap, replace=True)
+            X_bs = X[idxs]
+            y_bs = y[idxs]
 
+            # 2) Crear el árbol con los mismos hiperparámetros
+            árbol = ArbolDecision(
+                min_ejemplos_nodo_interior=self.min_ejemplos_nodo_interior,
+                max_prof=self.max_prof,
+                n_atrs=self.n_atrs,
+                prop_umbral=self.prop_umbral
+            )
+            # 3) Entrenar sobre el bootstrap sample
+            árbol.entrena(X_bs, y_bs)
 
+            # 4) Guardar el árbol entrenado
+            self.arboles.append(árbol)
 
+    def clasifica(self, X):
+        """
+        Clasifica un array X (N × m) devolviendo para cada instancia la clase
+        por mayoría de votos entre los árboles del bosque.
 
+        Si no se ha llamado a entrena() con anterioridad (self.arboles vacío),
+        lanza ClasificadorNoEntrenado.
+        """
+        if len(self.arboles) == 0:
+            raise ClasificadorNoEntrenado("El Random Forest no ha sido entrenado aún.")
 
+        n_ejemplos = X.shape[0]
+        n_trees = len(self.arboles)
 
+        # 1) Cada árbol predice sobre todo X
+        #    Guardamos un listado de arrays, cada uno con shape (n_ejemplos,)
+        preds_por_arbol = [árbol.clasifica(X) for árbol in self.arboles]
 
+        # 2) Para cada instancia i, hacemos majority vote entre preds_por_arbol[*][i]
+        preds_final = np.empty(shape=(n_ejemplos,), dtype=object)
+        for i in range(n_ejemplos):
+            votos = [preds_por_arbol[t][i] for t in range(n_trees)]
+            # Contar manualmente sin usar Counter
+            conteo = {}
+            for voto in votos:
+                if voto in conteo:
+                    conteo[voto] += 1
+                else:
+                    conteo[voto] = 1
 
+            # Obtener la clase con mayor frecuencia
+            clase_pred = None
+            max_cuenta = -1
+            for clase, cuenta in conteo.items():
+                if cuenta > max_cuenta:
+                    max_cuenta = cuenta
+                    clase_pred = clase
 
+            preds_final[i] = clase_pred
 
-
-
-
-
-
-
+        return preds_final
 
 
 
@@ -1151,23 +1232,53 @@ import pandas as pd
 # * X_train_credito, y_train_credito, X_test_credito, y_test_credito
 #   conteniendo el dataset de crédito con los atributos numñericos:
 
+# --- 1) DATASET CRÉDITO -------------------------------------------------------
 
+# Cargar el CSV: asumimos que está en "datos/credito.csv"
+df_credito = pd.read_csv("datos/credito.py", header=None)
 
+# Separar X_credito (seis primeras columnas) y y_credito (última columna)
+X_credito = df_credito.iloc[:, :-1].to_numpy()
+y_credito = df_credito.iloc[:, -1].to_numpy()
 
+# Codificar las 6 columnas categóricas con valores ordinales
+ordinal_cred = OrdinalEncoder()
+X_credito_num = ordinal_cred.fit_transform(X_credito)
 
+# 1.1) Partir en entrenamiento+validación (80%) y prueba (20%)
+X_temp_credito, X_test_credito, y_temp_credito, y_test_credito = particion_entr_prueba(
+    X_credito_num, y_credito, test=0.20
+)
 
-
-
+# 1.2) De los 80% (X_temp_credito), partir 75% para entrenamiento y 25% para validación
+#      (25% de 80% = 20% del total). Es decir, usamos test=0.25 sobre el subset.
+X_train_credito, X_valid_credito, y_train_credito, y_valid_credito = particion_entr_prueba(
+    X_temp_credito, y_temp_credito, test=0.25
+)
 
 
 # * X_train_adult, y_train_adult, X_test_adult, y_test_adult
 #   conteniendo el AdultDataset con los atributos numéricos:
 
+# --- 2) DATASET ADULTDATASET --------------------------------------------------
 
+# Cargar el CSV: asumimos que está en "datos/adultDataset.csv"
+df_adult = pd.read_csv("datos/adultDataset.csv", header=None)
 
+# Separar X_adult (todas menos la última) e y_adult (última columna)
+X_adult = df_adult.iloc[:, :-1].to_numpy()
+y_adult = df_adult.iloc[:, -1].to_numpy()
 
+# Partir en entrenamiento (70%) y prueba (30%)
+X_train_adult, X_test_adult, y_train_adult, y_test_adult = particion_entr_prueba(
+    X_adult, y_adult, test=0.30
+)
 
-
+# Aplicar OrdinalEncoder solo a las columnas categóricas (índices 4 en adelante)
+ordinal_adult = OrdinalEncoder()
+ordinal_adult.fit(X_train_adult[:, 4:])
+X_train_adult[:, 4:] = ordinal_adult.transform(X_train_adult[:, 4:])
+X_test_adult[:, 4:]  = ordinal_adult.transform(X_test_adult[:, 4:])
 
 
 
@@ -1175,7 +1286,65 @@ import pandas as pd
 #   conteniendo el dataset de los dígitos escritos a mano:
     
 
+# --- 3) DATASET DÍGITOS (digitdata) ------------------------------------------
 
+# Función auxiliar para leer un fichero de imágenes de dígitos en formato texto:
+def lee_imagenes_digitos(path_imagenes, n_ejemplos):
+    """
+    Lee n_ejemplos imágenes de 28×28 caracteres del fichero path_imagenes.
+    Cada imagen ocupa 28 líneas de 28 caracteres. Un píxel blanco (' ') → 0; '+' o '#' → 1.
+    Devuelve un array numpy de forma (n_ejemplos, 784).
+    """
+    X = np.zeros((n_ejemplos, 28 * 28), dtype=int)
+    with open(path_imagenes, 'r') as f:
+        linea = f.readline()
+        i = 0
+        while linea and i < n_ejemplos:
+            pixeles = []
+            for _ in range(28):
+                fila = linea.rstrip("\n")
+                pixeles.extend([0 if ch == ' ' else 1 for ch in fila])
+                linea = f.readline()
+            X[i, :] = np.array(pixeles, dtype=int)
+            i += 1
+            linea = f.readline()
+    return X
+
+# Función auxiliar para leer las etiquetas de dígitos:
+def lee_labels_digitos(path_labels):
+    """
+    Lee un fichero de etiquetas (una línea = un dígito). Devuelve un array numpy.
+    """
+    with open(path_labels, 'r') as f:
+        y = [int(l.strip()) for l in f.readlines()]
+    return np.array(y, dtype=int)
+
+# Rutas a los archivos digitdata:
+#   "datos/digitdata/trainimages"  → imágenes de entrenamiento
+#   "datos/digitdata/trainlabels"  → etiquetas entrenamiento
+#   "datos/digitdata/validimages"  → imágenes de validación
+#   "datos/digitdata/validlabels"  → etiquetas validación
+#   "datos/digitdata/testimages"   → imágenes de prueba
+#   "datos/digitdata/testlabels"   → etiquetas prueba
+
+# 3.1) Leer etiquetas para contar cuántas hay en cada fichero
+y_train_digitos = lee_labels_digitos("datos/digitdata/trainlabels")
+y_valid_digitos = lee_labels_digitos("datos/digitdata/validlabels")
+y_test_digitos  = lee_labels_digitos("datos/digitdata/testlabels")
+
+n_train_d = y_train_digitos.shape[0]
+n_valid_d = y_valid_digitos.shape[0]
+n_test_d  = y_test_digitos.shape[0]
+
+# 3.2) Leer las imágenes correspondientes
+X_train_digitos = lee_imagenes_digitos("datos/digitdata/trainimages", n_train_d)
+X_valid_digitos = lee_imagenes_digitos("datos/digitdata/validimages", n_valid_d)
+X_test_digitos  = lee_imagenes_digitos("datos/digitdata/testimages",  n_test_d)
+
+# Renombrar variables según pide el enunciado:
+X_train_dg, y_train_dg = X_train_digitos, y_train_digitos
+X_valid_dg, y_valid_dg = X_valid_digitos, y_valid_digitos
+X_test_dg,  y_test_dg  = X_test_digitos,  y_test_digitos
 
 
 
@@ -1214,7 +1383,216 @@ import pandas as pd
 
 
 
+# -- CRÉDITO --
+# Partición entrenamiento+validación / prueba
+Xe_cred, Xp_cred, ye_cred, yp_cred = particion_entr_prueba(X_credito, y_credito, test=0.2)
+# A su vez, Xe_cred se divide en entrenamiento / validación
+Xe_cred_ent, Xe_cred_val, ye_cred_ent, ye_cred_val = particion_entr_prueba(Xe_cred, ye_cred, test=0.25)
 
+# Listas de valores a probar
+lista_n_arboles = [10, 20, 50]
+lista_prop_muestras = [0.6, 0.8, 1.0]
+lista_min_ej = [3, 5, 10]
+lista_max_prof = [5, 10]
+lista_n_atrs = [5, 10, X_credito.shape[1]]
+lista_prop_umb = [0.6, 0.8, 1.0]
+
+mejor_comb = None
+mejor_rend_val = 0.0
+
+for n_ar in lista_n_arboles:
+    for pm in lista_prop_muestras:
+        for min_e in lista_min_ej:
+            for mp in lista_max_prof:
+                for na in lista_n_atrs:
+                    for pu in lista_prop_umb:
+                        rf = RandomForest(
+                            n_arboles=n_ar,
+                            prop_muestras=pm,
+                            min_ejemplos_nodo_interior=min_e,
+                            max_prof=mp,
+                            n_atrs=na,
+                            prop_umbral=pu
+                        )
+                        rf.entrena(Xe_cred_ent, ye_cred_ent)
+                        rend_val = rendimiento(rf, Xe_cred_val, ye_cred_val)
+                        if rend_val > mejor_rend_val:
+                            mejor_rend_val = rend_val
+                            mejor_comb = (n_ar, pm, min_e, mp, na, pu)
+
+print("Mejor combinación en 'crédito':", mejor_comb, "con rendimiento en validación:", mejor_rend_val)
+
+# Reentreno definitivo sobre entrenamiento+validación
+(n_ar, pm, min_e, mp, na, pu) = mejor_comb
+RF_CREDITO = RandomForest(
+    n_arboles=n_ar,
+    prop_muestras=pm,
+    min_ejemplos_nodo_interior=min_e,
+    max_prof=mp,
+    n_atrs=na,
+    prop_umbral=pu
+)
+Xcred_ent_val = np.vstack((Xe_cred_ent, Xe_cred_val))
+ycred_ent_val = np.hstack((ye_cred_ent, ye_cred_val))
+RF_CREDITO.entrena(Xcred_ent_val, ycred_ent_val)
+print("Rendimiento RF sobre crédito (entren+valid → prueba):", rendimiento(RF_CREDITO, Xp_cred, yp_cred))
+print("\n")
+
+# -- ADULTDATASET --
+# Partición entrenamiento+validación / prueba
+Xe_adult, Xp_adult, ye_adult, yp_adult = particion_entr_prueba(X_train_adult, y_train_adult, test=0.2)
+Xe_adult_ent, Xe_adult_val, ye_adult_ent, ye_adult_val = particion_entr_prueba(Xe_adult, ye_adult, test=0.25)
+
+lista_n_arboles = [10, 20, 50]
+lista_prop_muestras = [0.6, 0.8, 1.0]
+lista_min_ej = [5, 10]
+lista_max_prof = [5, 10]
+lista_n_atrs = [5, 10, X_train_adult.shape[1]]
+lista_prop_umb = [0.6, 0.8, 1.0]
+
+mejor_comb = None
+mejor_rend_val = 0.0
+
+for n_ar in lista_n_arboles:
+    for pm in lista_prop_muestras:
+        for min_e in lista_min_ej:
+            for mp in lista_max_prof:
+                for na in lista_n_atrs:
+                    for pu in lista_prop_umb:
+                        rf = RandomForest(
+                            n_arboles=n_ar,
+                            prop_muestras=pm,
+                            min_ejemplos_nodo_interior=min_e,
+                            max_prof=mp,
+                            n_atrs=na,
+                            prop_umbral=pu
+                        )
+                        rf.entrena(Xe_adult_ent, ye_adult_ent)
+                        rend_val = rendimiento(rf, Xe_adult_val, ye_adult_val)
+                        if rend_val > mejor_rend_val:
+                            mejor_rend_val = rend_val
+                            mejor_comb = (n_ar, pm, min_e, mp, na, pu)
+
+print("Mejor combinación en 'adult':", mejor_comb, "con rendimiento en validación:", mejor_rend_val)
+
+(n_ar, pm, min_e, mp, na, pu) = mejor_comb
+RF_ADULT = RandomForest(
+    n_arboles=n_ar,
+    prop_muestras=pm,
+    min_ejemplos_nodo_interior=min_e,
+    max_prof=mp,
+    n_atrs=na,
+    prop_umbral=pu
+)
+Xadult_ent_val = np.vstack((Xe_adult_ent, Xe_adult_val))
+yadult_ent_val = np.hstack((ye_adult_ent, ye_adult_val))
+RF_ADULT.entrena(Xadult_ent_val, yadult_ent_val)
+print("Rendimiento RF sobre adult (entren+valid → prueba):", rendimiento(RF_ADULT, Xp_adult, yp_adult))
+print("\n")
+
+# -- DÍGITOS --
+# Supongamos que en 4.1 hemos creado Ya:
+#   X_train_dg, y_train_dg, X_valid_dg, y_valid_dg, X_test_dg, y_test_dg
+lista_n_arboles = [10, 20, 50]
+lista_prop_muestras = [0.6, 0.8, 1.0]
+lista_min_ej = [3, 5]
+lista_max_prof = [5, 10]
+lista_n_atrs = [50, 100, X_train_dg.shape[1]]
+lista_prop_umb = [0.6, 0.8, 1.0]
+
+mejor_comb = None
+mejor_rend_val = 0.0
+
+for n_ar in lista_n_arboles:
+    for pm in lista_prop_muestras:
+        for min_e in lista_min_ej:
+            for mp in lista_max_prof:
+                for na in lista_n_atrs:
+                    for pu in lista_prop_umb:
+                        rf = RandomForest(
+                            n_arboles=n_ar,
+                            prop_muestras=pm,
+                            min_ejemplos_nodo_interior=min_e,
+                            max_prof=mp,
+                            n_atrs=na,
+                            prop_umbral=pu
+                        )
+                        rf.entrena(X_train_dg, y_train_dg)
+                        rend_val = rendimiento(rf, X_valid_dg, y_valid_dg)
+                        if rend_val > mejor_rend_val:
+                            mejor_rend_val = rend_val
+                            mejor_comb = (n_ar, pm, min_e, mp, na, pu)
+
+print("Mejor combinación en 'dígitos':", mejor_comb, "con rendimiento en validación:", mejor_rend_val)
+
+(n_ar, pm, min_e, mp, na, pu) = mejor_comb
+RF_DG = RandomForest(
+    n_arboles=n_ar,
+    prop_muestras=pm,
+    min_ejemplos_nodo_interior=min_e,
+    max_prof=mp,
+    n_atrs=na,
+    prop_umbral=pu
+)
+# Unión entrenamiento+validación
+Xdg_ent_val = np.vstack((X_train_dg, X_valid_dg))
+ydg_ent_val = np.hstack((y_train_dg, y_valid_dg))
+RF_DG.entrena(Xdg_ent_val, ydg_ent_val)
+print("Rendimiento RF sobre dígitos (entren+valid → prueba):", rendimiento(RF_DG, X_test_dg, y_test_dg))
+print("\n")
+
+# -- IMDB --
+# IMDB ya viene con X_train_imdb, X_test_imdb, y_train_imdb, y_test_imdb
+# Sólo necesitamos tomar parte del entrenamiento como validación:
+Xe_imdb_ent, Xe_imdb_val, ye_imdb_ent, ye_imdb_val = particion_entr_prueba(X_train_imdb, y_train_imdb, test=0.2)
+
+lista_n_arboles = [10, 20, 50]
+lista_prop_muestras = [0.6, 0.8, 1.0]
+lista_min_ej = [3, 5]
+lista_max_prof = [5, 10]
+lista_n_atrs = [50, 100, X_train_imdb.shape[1]]
+lista_prop_umb = [0.6, 0.8, 1.0]
+
+mejor_comb = None
+mejor_rend_val = 0.0
+
+for n_ar in lista_n_arboles:
+    for pm in lista_prop_muestras:
+        for min_e in lista_min_ej:
+            for mp in lista_max_prof:
+                for na in lista_n_atrs:
+                    for pu in lista_prop_umb:
+                        rf = RandomForest(
+                            n_arboles=n_ar,
+                            prop_muestras=pm,
+                            min_ejemplos_nodo_interior=min_e,
+                            max_prof=mp,
+                            n_atrs=na,
+                            prop_umbral=pu
+                        )
+                        rf.entrena(Xe_imdb_ent, ye_imdb_ent)
+                        rend_val = rendimiento(rf, Xe_imdb_val, ye_imdb_val)
+                        if rend_val > mejor_rend_val:
+                            mejor_rend_val = rend_val
+                            mejor_comb = (n_ar, pm, min_e, mp, na, pu)
+
+print("Mejor combinación en 'IMDB':", mejor_comb, "con rendimiento en validación:", mejor_rend_val)
+
+(n_ar, pm, min_e, mp, na, pu) = mejor_comb
+RF_IMDB = RandomForest(
+    n_arboles=n_ar,
+    prop_muestras=pm,
+    min_ejemplos_nodo_interior=min_e,
+    max_prof=mp,
+    n_atrs=na,
+    prop_umbral=pu
+)
+# Unión entrenamiento+validación
+Ximdb_ent_val = np.vstack((Xe_imdb_ent, Xe_imdb_val))
+yimdb_ent_val = np.hstack((ye_imdb_ent, ye_imdb_val))
+RF_IMDB.entrena(Ximdb_ent_val, yimdb_ent_val)
+print("Rendimiento RF sobre IMDB (entren+valid → prueba):", rendimiento(RF_IMDB, X_test_imdb, y_test_imdb))
+print("\n")
 
 
 
@@ -1303,13 +1681,13 @@ print(f"****** Rendimiento DT votos en test:  {rend_test_votos}\n\n\n\n")
 
 
 
-clf_iris = ArbolDecision(max_prof=3,n_atrs=4)
-clf_iris.entrena(X_train_iris, y_train_iris)
-clf_iris.imprime_arbol(["Long. Sépalo", "Anch. Sépalo", "Long. Pétalo", "Anch. Pétalo"],"Clase")
-rend_train_iris = rendimiento(clf_iris,X_train_iris,y_train_iris)
-rend_test_iris = rendimiento(clf_iris,X_test_iris,y_test_iris)
-print(f"********************* Rendimiento DT iris train: {rend_train_iris}")
-print(f"********************* Rendimiento DT iris test: {rend_test_iris}\n\n\n\n ")
+# clf_iris = ArbolDecision(max_prof=3,n_atrs=4)
+# clf_iris.entrena(X_train_iris, y_train_iris)
+# clf_iris.imprime_arbol(["Long. Sépalo", "Anch. Sépalo", "Long. Pétalo", "Anch. Pétalo"],"Clase")
+# rend_train_iris = rendimiento(clf_iris,X_train_iris,y_train_iris)
+# rend_test_iris = rendimiento(clf_iris,X_test_iris,y_test_iris)
+# print(f"********************* Rendimiento DT iris train: {rend_train_iris}")
+# print(f"********************* Rendimiento DT iris test: {rend_test_iris}\n\n\n\n ")
 
 
 
