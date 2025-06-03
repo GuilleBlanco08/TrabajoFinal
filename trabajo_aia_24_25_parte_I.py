@@ -1229,122 +1229,114 @@ import pandas as pd
 #   las siguientes variables, con los datasets anteriores como arrays de numpy.
 
 
+
 # * X_train_credito, y_train_credito, X_test_credito, y_test_credito
 #   conteniendo el dataset de crédito con los atributos numñericos:
 
+
 # --- 1) DATASET CRÉDITO -------------------------------------------------------
 
-# Cargar el CSV: asumimos que está en "datos/credito.csv"
-df_credito = pd.read_csv("datos/credito.py", header=None)
+from datos.credito import datos_con_clas
 
-# Separar X_credito (seis primeras columnas) y y_credito (última columna)
-X_credito = df_credito.iloc[:, :-1].to_numpy()
-y_credito = df_credito.iloc[:, -1].to_numpy()
+lista_X = [fila[:-1] for fila in datos_con_clas]
+lista_y = [fila[-1]  for fila in datos_con_clas]
 
-# Codificar las 6 columnas categóricas con valores ordinales
-ordinal_cred = OrdinalEncoder()
-X_credito_num = ordinal_cred.fit_transform(X_credito)
+X_credito = np.array(lista_X, dtype=object)
+y_credito = np.array(lista_y, dtype=object)
 
-# 1.1) Partir en entrenamiento+validación (80%) y prueba (20%)
-X_temp_credito, X_test_credito, y_temp_credito, y_test_credito = particion_entr_prueba(
-    X_credito_num, y_credito, test=0.20
-)
+# Codificamos con OrdinalEncoder
+encoder_cred = OrdinalEncoder()
+X_credito_enc = encoder_cred.fit_transform(X_credito)  # → array de floats
 
-# 1.2) De los 80% (X_temp_credito), partir 75% para entrenamiento y 25% para validación
-#      (25% de 80% = 20% del total). Es decir, usamos test=0.25 sobre el subset.
-X_train_credito, X_valid_credito, y_train_credito, y_valid_credito = particion_entr_prueba(
-    X_temp_credito, y_temp_credito, test=0.25
-)
+# Partición estratificada: 60% train, 20% valid, 20% test
+# 1) Separar 80% (ent+val) y 20% (test)
+Xe_cred, Xp_cred, ye_cred, yp_cred = particion_entr_prueba(X_credito_enc, y_credito, test=0.20)
 
+# 2) Separar esos 80% en 60% (entrenamiento) y 20% (validación)
+Xe_cred_ent, Xe_cred_val, ye_cred_ent, ye_cred_val = particion_entr_prueba(Xe_cred, ye_cred, test=0.25)
 
-# * X_train_adult, y_train_adult, X_test_adult, y_test_adult
-#   conteniendo el AdultDataset con los atributos numéricos:
+# Definimos explícitamente X_train_credito, X_test_credito, etc.
+X_train_credito = Xe_cred_ent
+y_train_credito = ye_cred_ent
+X_valid_credito = Xe_cred_val
+y_valid_credito = ye_cred_val
+X_test_credito  = Xp_cred
+y_test_credito  = yp_cred
+
 
 # --- 2) DATASET ADULTDATASET --------------------------------------------------
 
-# Cargar el CSV: asumimos que está en "datos/adultDataset.csv"
+# Antes: cargabas X_adult sin especificar dtype y luego codificabas sólo columnas 4...
+# Lo cambiamos para codificar todas las columnas y evitar que queden strings.
+
+# Cargar todo como object (números o strings):
 df_adult = pd.read_csv("datos/adultDataset.csv", header=None)
+X_adult = df_adult.iloc[:, :-1].to_numpy(dtype=object)
+y_adult = df_adult.iloc[:, -1].to_numpy(dtype=object)
 
-# Separar X_adult (todas menos la última) e y_adult (última columna)
-X_adult = df_adult.iloc[:, :-1].to_numpy()
-y_adult = df_adult.iloc[:, -1].to_numpy()
+# Ahora aplicamos OrdinalEncoder a TODAS las columnas de X_adult:
+encoder_adult = OrdinalEncoder()
+X_adult_enc = encoder_adult.fit_transform(X_adult)
+# X_adult_enc es un array de floats (sin ningún string).
 
-# Partir en entrenamiento (70%) y prueba (30%)
-X_train_adult, X_test_adult, y_train_adult, y_test_adult = particion_entr_prueba(
-    X_adult, y_adult, test=0.30
+# Particion estratificada: 70% ent+val, 30% test
+Xe_adult, Xp_adult, ye_adult, yp_adult = particion_entr_prueba(X_adult_enc, y_adult, test=0.30)
+
+# De esos 70%, tomar 75% para entrenamiento (0.70×0.75=0.525) y 25% para validación (0.70×0.25=0.175):
+Xe_adult_ent, Xe_adult_val, ye_adult_ent, ye_adult_val = particion_entr_prueba(
+    Xe_adult, ye_adult, test=0.25
 )
 
-# Aplicar OrdinalEncoder solo a las columnas categóricas (índices 4 en adelante)
-ordinal_adult = OrdinalEncoder()
-ordinal_adult.fit(X_train_adult[:, 4:])
-X_train_adult[:, 4:] = ordinal_adult.transform(X_train_adult[:, 4:])
-X_test_adult[:, 4:]  = ordinal_adult.transform(X_test_adult[:, 4:])
+# Definir las variables finales para usar en ejemplos:
+X_train_adult = Xe_adult_ent
+y_train_adult = ye_adult_ent
+X_valid_adult = Xe_adult_val
+y_valid_adult = ye_adult_val
+X_test_adult  = Xp_adult
+y_test_adult  = yp_adult
 
 
+# --- 3) DATASET DÍGITOS (digitdata) CORREGIDO ------------------------------
 
-# * X_train_dg, y_train_dg, X_valid_dg, y_valid_dg, X_test_dg, y_test_dg
-#   conteniendo el dataset de los dígitos escritos a mano:
-    
-
-# --- 3) DATASET DÍGITOS (digitdata) ------------------------------------------
-
-# Función auxiliar para leer un fichero de imágenes de dígitos en formato texto:
 def lee_imagenes_digitos(path_imagenes, n_ejemplos):
-    """
-    Lee n_ejemplos imágenes de 28×28 caracteres del fichero path_imagenes.
-    Cada imagen ocupa 28 líneas de 28 caracteres. Un píxel blanco (' ') → 0; '+' o '#' → 1.
-    Devuelve un array numpy de forma (n_ejemplos, 784).
-    """
-    X = np.zeros((n_ejemplos, 28 * 28), dtype=int)
+    X = np.zeros((n_ejemplos, 28*28), dtype=int)
     with open(path_imagenes, 'r') as f:
-        linea = f.readline()
-        i = 0
-        while linea and i < n_ejemplos:
+        for i in range(n_ejemplos):
             pixeles = []
             for _ in range(28):
+                linea = f.readline()
+                if not linea:
+                    raise ValueError(f"El fichero {path_imagenes} terminó antes de leer 28 líneas para la imagen {i}.")
                 fila = linea.rstrip("\n")
                 pixeles.extend([0 if ch == ' ' else 1 for ch in fila])
-                linea = f.readline()
             X[i, :] = np.array(pixeles, dtype=int)
-            i += 1
-            linea = f.readline()
     return X
 
-# Función auxiliar para leer las etiquetas de dígitos:
 def lee_labels_digitos(path_labels):
-    """
-    Lee un fichero de etiquetas (una línea = un dígito). Devuelve un array numpy.
-    """
     with open(path_labels, 'r') as f:
         y = [int(l.strip()) for l in f.readlines()]
     return np.array(y, dtype=int)
 
-# Rutas a los archivos digitdata:
-#   "datos/digitdata/trainimages"  → imágenes de entrenamiento
-#   "datos/digitdata/trainlabels"  → etiquetas entrenamiento
-#   "datos/digitdata/validimages"  → imágenes de validación
-#   "datos/digitdata/validlabels"  → etiquetas validación
-#   "datos/digitdata/testimages"   → imágenes de prueba
-#   "datos/digitdata/testlabels"   → etiquetas prueba
+ruta_train_labels = "datos/digitdata/traininglabels"
+ruta_valid_labels = "datos/digitdata/validationlabels"
+ruta_test_labels  = "datos/digitdata/testlabels"
 
-# 3.1) Leer etiquetas para contar cuántas hay en cada fichero
-y_train_digitos = lee_labels_digitos("datos/digitdata/trainlabels")
-y_valid_digitos = lee_labels_digitos("datos/digitdata/validlabels")
-y_test_digitos  = lee_labels_digitos("datos/digitdata/testlabels")
+y_train_digitos = lee_labels_digitos(ruta_train_labels)
+y_valid_digitos = lee_labels_digitos(ruta_valid_labels)
+y_test_digitos  = lee_labels_digitos(ruta_test_labels)
 
 n_train_d = y_train_digitos.shape[0]
 n_valid_d = y_valid_digitos.shape[0]
 n_test_d  = y_test_digitos.shape[0]
 
-# 3.2) Leer las imágenes correspondientes
-X_train_digitos = lee_imagenes_digitos("datos/digitdata/trainimages", n_train_d)
-X_valid_digitos = lee_imagenes_digitos("datos/digitdata/validimages", n_valid_d)
-X_test_digitos  = lee_imagenes_digitos("datos/digitdata/testimages",  n_test_d)
+X_train_digitos = lee_imagenes_digitos("datos/digitdata/trainingimages",   n_train_d)
+X_valid_digitos = lee_imagenes_digitos("datos/digitdata/validationimages", n_valid_d)
+X_test_digitos  = lee_imagenes_digitos("datos/digitdata/testimages",       n_test_d)
 
-# Renombrar variables según pide el enunciado:
-X_train_dg, y_train_dg = X_train_digitos, y_train_digitos
-X_valid_dg, y_valid_dg = X_valid_digitos, y_valid_digitos
-X_test_dg,  y_test_dg  = X_test_digitos,  y_test_digitos
+X_train_dg, y_train_dg = X_train_digitos,  y_train_digitos
+X_valid_dg, y_valid_dg = X_valid_digitos,  y_valid_digitos
+X_test_dg,  y_test_dg  = X_test_digitos,   y_test_digitos
+
 
 
 
@@ -1383,22 +1375,20 @@ X_test_dg,  y_test_dg  = X_test_digitos,  y_test_digitos
 
 
 
-# -- CRÉDITO --
-# Partición entrenamiento+validación / prueba
-Xe_cred, Xp_cred, ye_cred, yp_cred = particion_entr_prueba(X_credito, y_credito, test=0.2)
-# A su vez, Xe_cred se divide en entrenamiento / validación
+
+#-- CRÉDITO --
+Xe_cred, Xp_cred, ye_cred, yp_cred = particion_entr_prueba(X_credito_enc, y_credito, test=0.20)
 Xe_cred_ent, Xe_cred_val, ye_cred_ent, ye_cred_val = particion_entr_prueba(Xe_cred, ye_cred, test=0.25)
 
-# Listas de valores a probar
-lista_n_arboles = [10, 20, 50]
+lista_n_arboles     = [10, 20]
 lista_prop_muestras = [0.6, 0.8, 1.0]
-lista_min_ej = [3, 5, 10]
-lista_max_prof = [5, 10]
-lista_n_atrs = [5, 10, X_credito.shape[1]]
-lista_prop_umb = [0.6, 0.8, 1.0]
+lista_min_ej        = [3, 5, 10]
+lista_max_prof      = [5, 10]
+lista_n_atrs        = [5, 10, X_credito_enc.shape[1]]
+lista_prop_umb      = [0.6, 0.8, 1.0]
 
-mejor_comb = None
-mejor_rend_val = 0.0
+mejor_comb         = None
+mejor_rend_val     = 0.0
 
 for n_ar in lista_n_arboles:
     for pm in lista_prop_muestras:
@@ -1438,19 +1428,22 @@ RF_CREDITO.entrena(Xcred_ent_val, ycred_ent_val)
 print("Rendimiento RF sobre crédito (entren+valid → prueba):", rendimiento(RF_CREDITO, Xp_cred, yp_cred))
 print("\n")
 
+
+
 # -- ADULTDATASET --
-# Partición entrenamiento+validación / prueba
-Xe_adult, Xp_adult, ye_adult, yp_adult = particion_entr_prueba(X_train_adult, y_train_adult, test=0.2)
+# Usar X_adult_enc (floats), no X_adult original con strings
+Xe_adult, Xp_adult, ye_adult, yp_adult = particion_entr_prueba(X_adult_enc, y_adult, test=0.30)
 Xe_adult_ent, Xe_adult_val, ye_adult_ent, ye_adult_val = particion_entr_prueba(Xe_adult, ye_adult, test=0.25)
 
-lista_n_arboles = [10, 20, 50]
-lista_prop_muestras = [0.6, 0.8, 1.0]
-lista_min_ej = [5, 10]
-lista_max_prof = [5, 10]
-lista_n_atrs = [5, 10, X_train_adult.shape[1]]
-lista_prop_umb = [0.6, 0.8, 1.0]
 
-mejor_comb = None
+lista_n_arboles     = [10, 20]
+lista_prop_muestras = [0.6, 0.8, 1.0]
+lista_min_ej        = [5, 10]
+lista_max_prof      = [5, 10]
+lista_n_atrs        = [5, 10, X_adult.shape[1]]
+lista_prop_umb      = [0.6, 0.8, 1.0]
+
+mejor_comb     = None
 mejor_rend_val = 0.0
 
 for n_ar in lista_n_arboles:
@@ -1493,7 +1486,7 @@ print("\n")
 # -- DÍGITOS --
 # Supongamos que en 4.1 hemos creado Ya:
 #   X_train_dg, y_train_dg, X_valid_dg, y_valid_dg, X_test_dg, y_test_dg
-lista_n_arboles = [10, 20, 50]
+lista_n_arboles = [10, 20]
 lista_prop_muestras = [0.6, 0.8, 1.0]
 lista_min_ej = [3, 5]
 lista_max_prof = [5, 10]
@@ -1546,7 +1539,7 @@ print("\n")
 # Sólo necesitamos tomar parte del entrenamiento como validación:
 Xe_imdb_ent, Xe_imdb_val, ye_imdb_ent, ye_imdb_val = particion_entr_prueba(X_train_imdb, y_train_imdb, test=0.2)
 
-lista_n_arboles = [10, 20, 50]
+lista_n_arboles = [10, 20]
 lista_prop_muestras = [0.6, 0.8, 1.0]
 lista_min_ej = [3, 5]
 lista_max_prof = [5, 10]
@@ -1731,10 +1724,9 @@ print(f"***** Rendimiento DT cancer en test: {rend_test_cancer}\n\n\n")
 
 
 
-
 # print("==== MEJOR RENDIMIENTO RANDOM FOREST SOBRE CRÉDITO:")
 
-# RF_CREDITO=RandomForest(??????????????) # ATENCIÓN: incorporar aquí los mejores valores de los parámetros tras el ajuste
+# RF_CREDITO=RandomForest(n_arboles=10,prop_muestras=0.6,min_ejemplos_nodo_interior=5,max_prof=10,n_atrs=10,prop_umbral=0.8) # ATENCIÓN: incorporar aquí los mejores valores de los parámetros tras el ajuste
 # RF_CREDITO.entrena(X_train_credito,y_train_credito) 
 # print("Rendimiento RF entrenamiento sobre crédito: ",rendimiento(RF_CREDITO,X_train_credito,y_train_credito))
 # print("Rendimiento RF  test sobre crédito: ",rendimiento(RF_CREDITO,X_test_credito,y_test_credito))
