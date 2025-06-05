@@ -1236,35 +1236,37 @@ import pandas as pd
 
 # --- 1) DATASET CRÉDITO -------------------------------------------------------
 
-from datos.credito import datos_con_clas
-
-lista_X = [fila[:-1] for fila in datos_con_clas]
-lista_y = [fila[-1]  for fila in datos_con_clas]
-
-X_credito = np.array(lista_X, dtype=object)
-y_credito = np.array(lista_y, dtype=object)
-
-# Codificamos con OrdinalEncoder
+# 1) Codificar con OrdinalEncoder (todos los atributos son categóricos)
 encoder_cred = OrdinalEncoder()
+# X_credito proviene de carga_datos y es de tipo object (strings)
 X_credito_enc = encoder_cred.fit_transform(X_credito)  # → array de floats
 
-# Partición estratificada: 60% train, 20% valid, 20% test
-# 1) Separar 80% (ent+val) y 20% (test)
-Xe_cred, Xp_cred, ye_cred, yp_cred = particion_entr_prueba(X_credito_enc, y_credito, test=0.20)
+# 2) Partición estratificada en 60% entrenamiento, 20% validación, 20% prueba
+#    Primero separamos 80% (ent+val) vs. 20% (test):
+Xe_cred, Xp_cred, ye_cred, yp_cred = particion_entr_prueba(
+    X_credito_enc, y_credito, test=0.20
+)
 
-# 2) Separar esos 80% en 60% (entrenamiento) y 20% (validación)
-Xe_cred_ent, Xe_cred_val, ye_cred_ent, ye_cred_val = particion_entr_prueba(Xe_cred, ye_cred, test=0.25)
+#    A continuación, de ese 80% separamos 75% para entrenamiento y 25% para validación,
+#    de manera que sobre el total quedan 60% entrenamiento y 20% validación:
+Xe_cred_ent, Xe_cred_val, ye_cred_ent, ye_cred_val = particion_entr_prueba(
+    Xe_cred, ye_cred, test=0.25
+)
 
-# Definimos explícitamente X_train_credito, X_test_credito, etc.
-X_train_credito = Xe_cred_ent
-y_train_credito = ye_cred_ent
-X_valid_credito = Xe_cred_val
-y_valid_credito = ye_cred_val
-X_test_credito  = Xp_cred
-y_test_credito  = yp_cred
+# 3) Definimos explícitamente las variables finales que usarás en entrenamiento/validación/prueba
+X_train_credito  = Xe_cred_ent
+y_train_credito  = ye_cred_ent
+X_valid_credito  = Xe_cred_val
+y_valid_credito  = ye_cred_val
+X_test_credito   = Xp_cred
+y_test_credito   = yp_cred
+
+# A partir de aquí, cualquier RandomForest o ArbolDecision que entrenes sobre crédito
+# debe usar X_train_credito, y_train_credito (y opcionalmente X_valid_credito para validación).
+# Y para evaluar el resultado final, usarás X_test_credito, y_test_credito.
 
 
-# --- 2) DATASET ADULTDATASET --------------------------------------------------
+# # --- 2) DATASET ADULTDATASET --------------------------------------------------
 
 # Antes: cargabas X_adult sin especificar dtype y luego codificabas sólo columnas 4...
 # Lo cambiamos para codificar todas las columnas y evitar que queden strings.
@@ -1377,216 +1379,215 @@ X_test_dg,  y_test_dg  = X_test_digitos,   y_test_digitos
 
 
 #-- CRÉDITO --
-Xe_cred, Xp_cred, ye_cred, yp_cred = particion_entr_prueba(X_credito_enc, y_credito, test=0.20)
-Xe_cred_ent, Xe_cred_val, ye_cred_ent, ye_cred_val = particion_entr_prueba(Xe_cred, ye_cred, test=0.25)
+# Xe_cred, Xp_cred, ye_cred, yp_cred = particion_entr_prueba(X_credito_enc, y_credito, test=0.20)
+# Xe_cred_ent, Xe_cred_val, ye_cred_ent, ye_cred_val = particion_entr_prueba(Xe_cred, ye_cred, test=0.25)
 
-lista_n_arboles     = [10, 20]
-lista_prop_muestras = [0.6, 0.8, 1.0]
-lista_min_ej        = [3, 5, 10]
-lista_max_prof      = [5, 10]
-lista_n_atrs        = [5, 10, X_credito_enc.shape[1]]
-lista_prop_umb      = [0.6, 0.8, 1.0]
+# lista_n_arboles     = [10, 20]
+# lista_prop_muestras = [0.6, 0.8, 1.0]
+# lista_min_ej        = [3, 5, 10]
+# lista_max_prof      = [5, 10]
+# lista_n_atrs        = [5, 10, X_credito_enc.shape[1]]
+# lista_prop_umb      = [0.6, 0.8, 1.0]
 
-mejor_comb         = None
-mejor_rend_val     = 0.0
+# mejor_comb         = None
+# mejor_rend_val     = 0.0
 
-for n_ar in lista_n_arboles:
-    for pm in lista_prop_muestras:
-        for min_e in lista_min_ej:
-            for mp in lista_max_prof:
-                for na in lista_n_atrs:
-                    for pu in lista_prop_umb:
-                        rf = RandomForest(
-                            n_arboles=n_ar,
-                            prop_muestras=pm,
-                            min_ejemplos_nodo_interior=min_e,
-                            max_prof=mp,
-                            n_atrs=na,
-                            prop_umbral=pu
-                        )
-                        rf.entrena(Xe_cred_ent, ye_cred_ent)
-                        rend_val = rendimiento(rf, Xe_cred_val, ye_cred_val)
-                        if rend_val > mejor_rend_val:
-                            mejor_rend_val = rend_val
-                            mejor_comb = (n_ar, pm, min_e, mp, na, pu)
+# for n_ar in lista_n_arboles:
+#     for pm in lista_prop_muestras:
+#         for min_e in lista_min_ej:
+#             for mp in lista_max_prof:
+#                 for na in lista_n_atrs:
+#                     for pu in lista_prop_umb:
+#                         rf = RandomForest(
+#                             n_arboles=n_ar,
+#                             prop_muestras=pm,
+#                             min_ejemplos_nodo_interior=min_e,
+#                             max_prof=mp,
+#                             n_atrs=na,
+#                             prop_umbral=pu
+#                         )
+#                         rf.entrena(Xe_cred_ent, ye_cred_ent)
+#                         rend_val = rendimiento(rf, Xe_cred_val, ye_cred_val)
+#                         if rend_val > mejor_rend_val:
+#                             mejor_rend_val = rend_val
+#                             mejor_comb = (n_ar, pm, min_e, mp, na, pu)
 
-print("Mejor combinación en 'crédito':", mejor_comb, "con rendimiento en validación:", mejor_rend_val)
+# print("Mejor combinación en 'crédito':", mejor_comb, "con rendimiento en validación:", mejor_rend_val)
 
-# Reentreno definitivo sobre entrenamiento+validación
-(n_ar, pm, min_e, mp, na, pu) = mejor_comb
-RF_CREDITO = RandomForest(
-    n_arboles=n_ar,
-    prop_muestras=pm,
-    min_ejemplos_nodo_interior=min_e,
-    max_prof=mp,
-    n_atrs=na,
-    prop_umbral=pu
-)
-Xcred_ent_val = np.vstack((Xe_cred_ent, Xe_cred_val))
-ycred_ent_val = np.hstack((ye_cred_ent, ye_cred_val))
-RF_CREDITO.entrena(Xcred_ent_val, ycred_ent_val)
-print("Rendimiento RF sobre crédito (entren+valid → prueba):", rendimiento(RF_CREDITO, Xp_cred, yp_cred))
-print("\n")
-
-
-
-# -- ADULTDATASET --
-# Usar X_adult_enc (floats), no X_adult original con strings
-Xe_adult, Xp_adult, ye_adult, yp_adult = particion_entr_prueba(X_adult_enc, y_adult, test=0.30)
-Xe_adult_ent, Xe_adult_val, ye_adult_ent, ye_adult_val = particion_entr_prueba(Xe_adult, ye_adult, test=0.25)
+# # Reentreno definitivo sobre entrenamiento+validación
+# (n_ar, pm, min_e, mp, na, pu) = mejor_comb
+# RF_CREDITO = RandomForest(
+#     n_arboles=n_ar,
+#     prop_muestras=pm,
+#     min_ejemplos_nodo_interior=min_e,
+#     max_prof=mp,
+#     n_atrs=na,
+#     prop_umbral=pu
+# )
+# Xcred_ent_val = np.vstack((Xe_cred_ent, Xe_cred_val))
+# ycred_ent_val = np.hstack((ye_cred_ent, ye_cred_val))
+# RF_CREDITO.entrena(Xcred_ent_val, ycred_ent_val)
+# print("Rendimiento RF sobre crédito (entren+valid → prueba):", rendimiento(RF_CREDITO, Xp_cred, yp_cred))
+# print("\n")
 
 
-lista_n_arboles     = [10, 20]
-lista_prop_muestras = [0.6, 0.8, 1.0]
-lista_min_ej        = [5, 10]
-lista_max_prof      = [5, 10]
-lista_n_atrs        = [5, 10, X_adult.shape[1]]
-lista_prop_umb      = [0.6, 0.8, 1.0]
 
-mejor_comb     = None
-mejor_rend_val = 0.0
+# # -- ADULTDATASET --
+# # Usar X_adult_enc (floats), no X_adult original con strings
+# Xe_adult, Xp_adult, ye_adult, yp_adult = particion_entr_prueba(X_adult_enc, y_adult, test=0.30)
+# Xe_adult_ent, Xe_adult_val, ye_adult_ent, ye_adult_val = particion_entr_prueba(Xe_adult, ye_adult, test=0.25)
 
-for n_ar in lista_n_arboles:
-    for pm in lista_prop_muestras:
-        for min_e in lista_min_ej:
-            for mp in lista_max_prof:
-                for na in lista_n_atrs:
-                    for pu in lista_prop_umb:
-                        rf = RandomForest(
-                            n_arboles=n_ar,
-                            prop_muestras=pm,
-                            min_ejemplos_nodo_interior=min_e,
-                            max_prof=mp,
-                            n_atrs=na,
-                            prop_umbral=pu
-                        )
-                        rf.entrena(Xe_adult_ent, ye_adult_ent)
-                        rend_val = rendimiento(rf, Xe_adult_val, ye_adult_val)
-                        if rend_val > mejor_rend_val:
-                            mejor_rend_val = rend_val
-                            mejor_comb = (n_ar, pm, min_e, mp, na, pu)
 
-print("Mejor combinación en 'adult':", mejor_comb, "con rendimiento en validación:", mejor_rend_val)
+# lista_n_arboles     = [10, 20]
+# lista_prop_muestras = [0.6, 0.8, 1.0]
+# lista_min_ej        = [5, 10]
+# lista_max_prof      = [5, 10]
+# lista_n_atrs        = [5, 10, X_adult.shape[1]]
+# lista_prop_umb      = [0.6, 0.8, 1.0]
 
-(n_ar, pm, min_e, mp, na, pu) = mejor_comb
-RF_ADULT = RandomForest(
-    n_arboles=n_ar,
-    prop_muestras=pm,
-    min_ejemplos_nodo_interior=min_e,
-    max_prof=mp,
-    n_atrs=na,
-    prop_umbral=pu
-)
-Xadult_ent_val = np.vstack((Xe_adult_ent, Xe_adult_val))
-yadult_ent_val = np.hstack((ye_adult_ent, ye_adult_val))
-RF_ADULT.entrena(Xadult_ent_val, yadult_ent_val)
-print("Rendimiento RF sobre adult (entren+valid → prueba):", rendimiento(RF_ADULT, Xp_adult, yp_adult))
-print("\n")
+# mejor_comb     = None
+# mejor_rend_val = 0.0
 
-# -- DÍGITOS --
-# Supongamos que en 4.1 hemos creado Ya:
-#   X_train_dg, y_train_dg, X_valid_dg, y_valid_dg, X_test_dg, y_test_dg
-lista_n_arboles = [10, 20]
-lista_prop_muestras = [0.6, 0.8, 1.0]
-lista_min_ej = [3, 5]
-lista_max_prof = [5, 10]
-lista_n_atrs = [50, 100, X_train_dg.shape[1]]
-lista_prop_umb = [0.6, 0.8, 1.0]
+# for n_ar in lista_n_arboles:
+#     for pm in lista_prop_muestras:
+#         for min_e in lista_min_ej:
+#             for mp in lista_max_prof:
+#                 for na in lista_n_atrs:
+#                     for pu in lista_prop_umb:
+#                         rf = RandomForest(
+#                             n_arboles=n_ar,
+#                             prop_muestras=pm,
+#                             min_ejemplos_nodo_interior=min_e,
+#                             max_prof=mp,
+#                             n_atrs=na,
+#                             prop_umbral=pu
+#                         )
+#                         rf.entrena(Xe_adult_ent, ye_adult_ent)
+#                         rend_val = rendimiento(rf, Xe_adult_val, ye_adult_val)
+#                         if rend_val > mejor_rend_val:
+#                             mejor_rend_val = rend_val
+#                             mejor_comb = (n_ar, pm, min_e, mp, na, pu)
 
-mejor_comb = None
-mejor_rend_val = 0.0
+# print("Mejor combinación en 'adult':", mejor_comb, "con rendimiento en validación:", mejor_rend_val)
 
-for n_ar in lista_n_arboles:
-    for pm in lista_prop_muestras:
-        for min_e in lista_min_ej:
-            for mp in lista_max_prof:
-                for na in lista_n_atrs:
-                    for pu in lista_prop_umb:
-                        rf = RandomForest(
-                            n_arboles=n_ar,
-                            prop_muestras=pm,
-                            min_ejemplos_nodo_interior=min_e,
-                            max_prof=mp,
-                            n_atrs=na,
-                            prop_umbral=pu
-                        )
-                        rf.entrena(X_train_dg, y_train_dg)
-                        rend_val = rendimiento(rf, X_valid_dg, y_valid_dg)
-                        if rend_val > mejor_rend_val:
-                            mejor_rend_val = rend_val
-                            mejor_comb = (n_ar, pm, min_e, mp, na, pu)
+# (n_ar, pm, min_e, mp, na, pu) = mejor_comb
+# RF_ADULT = RandomForest(
+#     n_arboles=n_ar,
+#     prop_muestras=pm,
+#     min_ejemplos_nodo_interior=min_e,
+#     max_prof=mp,
+#     n_atrs=na,
+#     prop_umbral=pu
+# )
+# Xadult_ent_val = np.vstack((Xe_adult_ent, Xe_adult_val))
+# yadult_ent_val = np.hstack((ye_adult_ent, ye_adult_val))
+# RF_ADULT.entrena(Xadult_ent_val, yadult_ent_val)
+# print("Rendimiento RF sobre adult (entren+valid → prueba):", rendimiento(RF_ADULT, Xp_adult, yp_adult))
+# print("\n")
 
-print("Mejor combinación en 'dígitos':", mejor_comb, "con rendimiento en validación:", mejor_rend_val)
+# # -- DÍGITOS --
+# # Supongamos que en 4.1 hemos creado Ya:
+# #   X_train_dg, y_train_dg, X_valid_dg, y_valid_dg, X_test_dg, y_test_dg
+# lista_n_arboles = [10, 20]
+# lista_prop_muestras = [0.6, 0.8, 1.0]
+# lista_min_ej = [3, 5]
+# lista_max_prof = [5, 10]
+# lista_n_atrs = [50, 100, X_train_dg.shape[1]]
+# lista_prop_umb = [0.6, 0.8, 1.0]
 
-(n_ar, pm, min_e, mp, na, pu) = mejor_comb
-RF_DG = RandomForest(
-    n_arboles=n_ar,
-    prop_muestras=pm,
-    min_ejemplos_nodo_interior=min_e,
-    max_prof=mp,
-    n_atrs=na,
-    prop_umbral=pu
-)
-# Unión entrenamiento+validación
-Xdg_ent_val = np.vstack((X_train_dg, X_valid_dg))
-ydg_ent_val = np.hstack((y_train_dg, y_valid_dg))
-RF_DG.entrena(Xdg_ent_val, ydg_ent_val)
-print("Rendimiento RF sobre dígitos (entren+valid → prueba):", rendimiento(RF_DG, X_test_dg, y_test_dg))
-print("\n")
+# mejor_comb = None
+# mejor_rend_val = 0.0
 
-# -- IMDB --
-# IMDB ya viene con X_train_imdb, X_test_imdb, y_train_imdb, y_test_imdb
-# Sólo necesitamos tomar parte del entrenamiento como validación:
-Xe_imdb_ent, Xe_imdb_val, ye_imdb_ent, ye_imdb_val = particion_entr_prueba(X_train_imdb, y_train_imdb, test=0.2)
+# for n_ar in lista_n_arboles:
+#     for pm in lista_prop_muestras:
+#         for min_e in lista_min_ej:
+#             for mp in lista_max_prof:
+#                 for na in lista_n_atrs:
+#                     for pu in lista_prop_umb:
+#                         rf = RandomForest(
+#                             n_arboles=n_ar,
+#                             prop_muestras=pm,
+#                             min_ejemplos_nodo_interior=min_e,
+#                             max_prof=mp,
+#                             n_atrs=na,
+#                             prop_umbral=pu
+#                         )
+#                         rf.entrena(X_train_dg, y_train_dg)
+#                         rend_val = rendimiento(rf, X_valid_dg, y_valid_dg)
+#                         if rend_val > mejor_rend_val:
+#                             mejor_rend_val = rend_val
+#                             mejor_comb = (n_ar, pm, min_e, mp, na, pu)
 
-lista_n_arboles = [10, 20]
-lista_prop_muestras = [0.6, 0.8, 1.0]
-lista_min_ej = [3, 5]
-lista_max_prof = [5, 10]
-lista_n_atrs = [50, 100, X_train_imdb.shape[1]]
-lista_prop_umb = [0.6, 0.8, 1.0]
+# print("Mejor combinación en 'dígitos':", mejor_comb, "con rendimiento en validación:", mejor_rend_val)
 
-mejor_comb = None
-mejor_rend_val = 0.0
+# (n_ar, pm, min_e, mp, na, pu) = mejor_comb
+# RF_DG = RandomForest(
+#     n_arboles=n_ar,
+#     prop_muestras=pm,
+#     min_ejemplos_nodo_interior=min_e,
+#     max_prof=mp,
+#     n_atrs=na,
+#     prop_umbral=pu
+# )
+# # Unión entrenamiento+validación
+# Xdg_ent_val = np.vstack((X_train_dg, X_valid_dg))
+# ydg_ent_val = np.hstack((y_train_dg, y_valid_dg))
+# RF_DG.entrena(Xdg_ent_val, ydg_ent_val)
+# print("Rendimiento RF sobre dígitos (entren+valid → prueba):", rendimiento(RF_DG, X_test_dg, y_test_dg))
+# print("\n")
 
-for n_ar in lista_n_arboles:
-    for pm in lista_prop_muestras:
-        for min_e in lista_min_ej:
-            for mp in lista_max_prof:
-                for na in lista_n_atrs:
-                    for pu in lista_prop_umb:
-                        rf = RandomForest(
-                            n_arboles=n_ar,
-                            prop_muestras=pm,
-                            min_ejemplos_nodo_interior=min_e,
-                            max_prof=mp,
-                            n_atrs=na,
-                            prop_umbral=pu
-                        )
-                        rf.entrena(Xe_imdb_ent, ye_imdb_ent)
-                        rend_val = rendimiento(rf, Xe_imdb_val, ye_imdb_val)
-                        if rend_val > mejor_rend_val:
-                            mejor_rend_val = rend_val
-                            mejor_comb = (n_ar, pm, min_e, mp, na, pu)
+# # -- IMDB --
+# # IMDB ya viene con X_train_imdb, X_test_imdb, y_train_imdb, y_test_imdb
+# # Sólo necesitamos tomar parte del entrenamiento como validación:
+# Xe_imdb_ent, Xe_imdb_val, ye_imdb_ent, ye_imdb_val = particion_entr_prueba(X_train_imdb, y_train_imdb, test=0.2)
 
-print("Mejor combinación en 'IMDB':", mejor_comb, "con rendimiento en validación:", mejor_rend_val)
+# lista_n_arboles = [10, 20]
+# lista_prop_muestras = [0.6, 0.8, 1.0]
+# lista_min_ej = [3, 5]
+# lista_max_prof = [5, 10]
+# lista_n_atrs = [50, 100, X_train_imdb.shape[1]]
+# lista_prop_umb = [0.6, 0.8, 1.0]
 
-(n_ar, pm, min_e, mp, na, pu) = mejor_comb
-RF_IMDB = RandomForest(
-    n_arboles=n_ar,
-    prop_muestras=pm,
-    min_ejemplos_nodo_interior=min_e,
-    max_prof=mp,
-    n_atrs=na,
-    prop_umbral=pu
-)
-# Unión entrenamiento+validación
-Ximdb_ent_val = np.vstack((Xe_imdb_ent, Xe_imdb_val))
-yimdb_ent_val = np.hstack((ye_imdb_ent, ye_imdb_val))
-RF_IMDB.entrena(Ximdb_ent_val, yimdb_ent_val)
-print("Rendimiento RF sobre IMDB (entren+valid → prueba):", rendimiento(RF_IMDB, X_test_imdb, y_test_imdb))
-print("\n")
+# mejor_comb = None
+# mejor_rend_val = 0.0
 
+# for n_ar in lista_n_arboles:
+#     for pm in lista_prop_muestras:
+#         for min_e in lista_min_ej:
+#             for mp in lista_max_prof:
+#                 for na in lista_n_atrs:
+#                     for pu in lista_prop_umb:
+#                         rf = RandomForest(
+#                             n_arboles=n_ar,
+#                             prop_muestras=pm,
+#                             min_ejemplos_nodo_interior=min_e,
+#                             max_prof=mp,
+#                             n_atrs=na,
+#                             prop_umbral=pu
+#                         )
+#                         rf.entrena(Xe_imdb_ent, ye_imdb_ent)
+#                         rend_val = rendimiento(rf, Xe_imdb_val, ye_imdb_val)
+#                         if rend_val > mejor_rend_val:
+#                             mejor_rend_val = rend_val
+#                             mejor_comb = (n_ar, pm, min_e, mp, na, pu)
+
+# print("Mejor combinación en 'IMDB':", mejor_comb, "con rendimiento en validación:", mejor_rend_val)
+
+# (n_ar, pm, min_e, mp, na, pu) = mejor_comb
+# RF_IMDB = RandomForest(
+#     n_arboles=n_ar,
+#     prop_muestras=pm,
+#     min_ejemplos_nodo_interior=min_e,
+#     max_prof=mp,
+#     n_atrs=na,
+#     prop_umbral=pu
+# )
+# # Unión entrenamiento+validación
+# Ximdb_ent_val = np.vstack((Xe_imdb_ent, Xe_imdb_val))
+# yimdb_ent_val = np.hstack((ye_imdb_ent, ye_imdb_val))
+# RF_IMDB.entrena(Ximdb_ent_val, yimdb_ent_val)
+# print("Rendimiento RF sobre IMDB (entren+valid → prueba):", rendimiento(RF_IMDB, X_test_imdb, y_test_imdb))
+# print("\n")
 
 
 
@@ -1645,8 +1646,10 @@ print("Estratificación entrenamiento crédito: ",np.unique(ye_credito,return_co
 print("Estratificación prueba crédito: ",np.unique(yp_credito,return_counts=True))
 print("\n\n\n")
 
-
-
+X_train_iris, X_test_iris, y_train_iris, y_test_iris = particion_entr_prueba(X_iris, y_iris, test=0.2)
+print("Estratificación entrenamiento iris: ",np.unique(y_train_iris,return_counts=True))
+print("Estratificación prueba iris: ",np.unique(y_test_iris,return_counts=True))
+print("\n\n\n")
 
 
 print("************ PRUEBAS EJERCICIO 2:")
@@ -1674,15 +1677,13 @@ print(f"****** Rendimiento DT votos en test:  {rend_test_votos}\n\n\n\n")
 
 
 
-# clf_iris = ArbolDecision(max_prof=3,n_atrs=4)
-# clf_iris.entrena(X_train_iris, y_train_iris)
-# clf_iris.imprime_arbol(["Long. Sépalo", "Anch. Sépalo", "Long. Pétalo", "Anch. Pétalo"],"Clase")
-# rend_train_iris = rendimiento(clf_iris,X_train_iris,y_train_iris)
-# rend_test_iris = rendimiento(clf_iris,X_test_iris,y_test_iris)
-# print(f"********************* Rendimiento DT iris train: {rend_train_iris}")
-# print(f"********************* Rendimiento DT iris test: {rend_test_iris}\n\n\n\n ")
-
-
+clf_iris = ArbolDecision(max_prof=3,n_atrs=4)
+clf_iris.entrena(X_train_iris, y_train_iris)
+clf_iris.imprime_arbol(["Long. Sépalo", "Anch. Sépalo", "Long. Pétalo", "Anch. Pétalo"],"Clase")
+rend_train_iris = rendimiento(clf_iris,X_train_iris,y_train_iris)
+rend_test_iris = rendimiento(clf_iris,X_test_iris,y_test_iris)
+print(f"********************* Rendimiento DT iris train: {rend_train_iris}")
+print(f"********************* Rendimiento DT iris test: {rend_test_iris}\n\n\n\n ")
 
 
 
