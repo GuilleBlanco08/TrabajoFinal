@@ -723,26 +723,7 @@ def entropia(y_sub):
 
 class ArbolDecision:
     def __init__(self, min_ejemplos_nodo_interior=5, max_prof=10, n_atrs=10, prop_umbral=1.0):
-        """
-        Constructor del árbol de decisión.
-
-        Parámetros:
-        -----------
-        min_ejemplos_nodo_interior : int
-            Número mínimo de ejemplos que debe tener un nodo para que se intente dividirlo.
-            Si en un nodo llegan menos de este umbral, se convierte en hoja inmediatamente.
-        max_prof : int
-            Profundidad máxima permitida. Si la llamada recursiva alcanza prof ≥ max_prof,
-            el nodo se convierte en hoja.
-        n_atrs : int
-            Número de atributos (columnas) que se seleccionarán aleatoriamente al principio del
-            entrenamiento y que se usarán en TODO el árbol. Si n_atrs ≥ número de columnas
-            de X, se usan todas las columnas.
-        prop_umbral : float
-            Proporción (0 < prop_umbral ≤ 1) de ejemplos de cada nodo que se usarán para
-            hallar candidatos de umbral. Ejemplo: prop_umbral=0.7 en un nodo con 200 ejemplos
-            usa 140 aleatorios para generar “cortes” candidatos de ese atributo.
-        """
+    
         self.min_ejemplos_nodo_interior = min_ejemplos_nodo_interior
         self.max_prof                  = max_prof
         self.n_atrs                    = n_atrs
@@ -755,15 +736,7 @@ class ArbolDecision:
         self.atributos_candidatos = None
 
     def entrena(self, X, y):
-        """
-        Entrena el árbol de decisión con los datos (X, y).
-
-        Pasos:
-        1) Obtener m = número total de columnas (atributos) en X.
-        2) Si n_atrs < m, sortear n_atrs índices de columna (0..m-1) sin reemplazo
-           y guardarlos en self.atributos_candidatos. Si n_atrs ≥ m, usar todos los atributos.
-        3) Llamar recursivamente a _construye_arbol_rec(X, y, prof=0) y guardar la raíz en self.raiz.
-        """
+        
         n_ejemplos, n_atributos_totales = X.shape
 
         if self.n_atrs < n_atributos_totales:
@@ -779,15 +752,6 @@ class ArbolDecision:
         self.raiz = self._construye_arbol_rec(X, y, prof=0)
 
     def _construye_arbol_rec(self, X_n, y_n, prof):
-        """
-        Construye recursivamente un nodo (hoja o interior) del árbol.
-        Parámetros:
-          - X_n : array numpy de forma (n_nodo, m), subconjunto de ejemplos en el nodo.
-          - y_n : array numpy de forma (n_nodo,), etiquetas correspondientes a X_n.
-          - prof: int, profundidad actual del nodo (0 = raíz).
-        Retorna:
-          - Un objeto Nodo, que puede ser hoja o nodo interior con atributo/umbral.
-        """
 
         # 1) Calculamos distribución de clases en este nodo (para hoja o para calculo de distr).
         clases_sub, cuentas_sub = np.unique(y_n, return_counts=True)
@@ -822,7 +786,7 @@ class ArbolDecision:
             k = max(1, int(np.round(self.prop_umbral * n_nodo)))
             indices_muestra = np.random.choice(n_nodo, size=k, replace=False)
 
-            Xm = X_n[indices_muestra, A]
+            Xm = X_n[indices_muestra, A] # A es el atributo candidato que hay en ese momento en el bucle 
             ym = y_n[indices_muestra]
 
             # 4.2) Ordenar la muestra por valor de Xm para detectar cambios de clase vecinos
@@ -832,7 +796,7 @@ class ArbolDecision:
 
             # 4.3) Construir lista de umbrales candidatos: puntos medios donde cambia la clase
             umbrales_A = []
-            for i in range(len(Xm_orden) - 1):
+            for i in range(len(Xm_orden) - 1): # Cogemos de la lista de clases el momento en el que cambian y calculamos el umbral y lo metemos en la lista de umbrales
                 if ym_orden[i] != ym_orden[i + 1]:
                     u = (Xm_orden[i] + Xm_orden[i + 1]) / 2.0
                     umbrales_A.append(u)
@@ -842,15 +806,15 @@ class ArbolDecision:
 
             # 4.4) Para cada candidato u, calculamos la ganancia de información
             for u in umbrales_A:
-                mask_izq = (X_n[:, A] <= u)
+                mask_izq = (X_n[:, A] <= u) # Devuelve un array de booleanos donde dicen true si el valor es menor que el umbral y viceversa en la derecha
                 mask_der = ~mask_izq
                 if (np.sum(mask_izq) == 0) or (np.sum(mask_der) == 0):
                     continue  # Split inválido (alguna rama vacía)
 
-                y_izq = y_n[mask_izq]
+                y_izq = y_n[mask_izq] # Array con las clases según el array de booleanos
                 y_der = y_n[mask_der]
 
-                H_izq = entropia(y_izq)
+                H_izq = entropia(y_izq) # Si todas son clase 0 por ejemplo entonces es igual a 0 -> nodo puro
                 H_der = entropia(y_der)
 
                 N_nodo = len(y_n)
@@ -860,7 +824,7 @@ class ArbolDecision:
                 H_hijos = (N_izq / N_nodo) * H_izq + (N_der / N_nodo) * H_der
                 gain    = H_padre - H_hijos
 
-                if gain > mejor_gain:
+                if gain > mejor_gain: # Si gain es mejor que el anterior lo actualizamos
                     mejor_gain   = gain
                     mejor_A      = int(A)
                     mejor_umbral = float(u)
@@ -879,7 +843,7 @@ class ArbolDecision:
             )
 
         # 6) Si sí hay mejor_A y mejor_umbral, particionamos todo el conjunto (X_n, y_n)
-        mask_split = (X_n[:, mejor_A] <= mejor_umbral)
+        mask_split = (X_n[:, mejor_A] <= mejor_umbral) # Particionamos según el mejor umbral y según la columna del mejor atributo
         X_izq, y_izq = X_n[mask_split],    y_n[mask_split]
         X_der, y_der = X_n[~mask_split],   y_n[~mask_split]
 
@@ -897,11 +861,8 @@ class ArbolDecision:
             clase    = None
         )
 
-    def clasifica(self, X):
-        """
-        Clasifica un array X (N × m) y devuelve un array de longitud N con las predicciones.
-        Si self.raiz es None (no se ha entrenado), lanza ClasificadorNoEntrenado.
-        """
+    def clasifica(self, X): # FACIL
+        
         if self.raiz is None:
             raise ClasificadorNoEntrenado("El árbol no ha sido entrenado aún.")
 
@@ -920,12 +881,8 @@ class ArbolDecision:
 
         return preds
 
-    def clasifica_prob(self, x):
-        """
-        Clasifica un único ejemplo x (vector 1D de longitud m).
-        Devuelve un dict {clase_i: probabilidad_i}, usando la distribución en la hoja.
-        Si self.raiz es None, lanza ClasificadorNoEntrenado.
-        """
+    def clasifica_prob(self, x): # FACIL
+        
         if self.raiz is None:
             raise ClasificadorNoEntrenado("El árbol no ha sido entrenado aún.")
 
@@ -936,44 +893,30 @@ class ArbolDecision:
             else:
                 nodo = nodo.der
 
-        dist = nodo.distr
+        dist = nodo.distr # Diccionario con las keys clase y los valores el numero de muestras
         total = sum(dist.values())
-        return {clase: cuenta / total for clase, cuenta in dist.items()}
+        return {clase: cuenta / total for clase, cuenta in dist.items()} # Devuelve la probabilidad de que una muestra que cae en esa hoja pertenezca a esa clase
 
     def imprime_arbol(self, nombre_atrs, nombre_clase):
-        """
-        Imprime en consola un dibujo textual del árbol entrenado.
-        Parámetros:
-          - nombre_atrs : lista de strings con el nombre de cada columna de X.
-          - nombre_clase: string con el nombre de la variable objetivo.
-        Si self.raiz es None, lanza ClasificadorNoEntrenado.
-        """
+        
         if self.raiz is None:
             raise ClasificadorNoEntrenado("El árbol no ha sido entrenado aún.")
         self._imprime_nodo(self.raiz, prof=0, nombre_atrs=nombre_atrs, nombre_clase=nombre_clase)
 
     def _imprime_nodo(self, nodo, prof, nombre_atrs, nombre_clase):
-        """
-        Función auxiliar recursiva que imprime cada nodo con indentación.
-        - Si nodo.es_hoja(): imprime 
-            "<espacios><nombre_clase>: <etiqueta_mayoritaria> -- {distr}"
-        - Si no, imprime 
-            "<espacios><atributo> <= <umbral>"
-            (hijo izquierdo)
-            "<espacios><atributo> > <umbral>"
-            (hijo derecho)
-        donde espacios = "    " * prof.
-        """
+        
         espacios = "    " * prof
 
         if nodo.es_hoja():
-            print(f"{espacios}{nombre_clase}: {nodo.clase} -- {nodo.distr}")
+            dist_limpia = { (k.item() if isinstance(k, np.generic) else k): v
+                for k, v in nodo.distr.items() }
+            print(f"{espacios}{nombre_clase}: {nodo.clase} -- {dist_limpia}")
         else:
             atr = nombre_atrs[nodo.atributo]
             um  = nodo.umbral
             print(f"{espacios}{atr} <= {um:.3f}")
             self._imprime_nodo(nodo.izq, prof + 1, nombre_atrs, nombre_clase)
-            print(f"{espacios}{atr} > {um:.3f}")
+            print(f"{espacios}{atr} >  {um:.3f}")
             self._imprime_nodo(nodo.der, prof + 1, nombre_atrs, nombre_clase)
 
 
