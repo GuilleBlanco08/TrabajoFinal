@@ -243,29 +243,7 @@ from carga_datos import *
 # ------------------------------------------------------------------
 
 def particion_entr_prueba(X, y, test=0.20):
-    """
-    Separa aleatoriamente (estratificado respecto a y) el conjunto (X, y)
-    en dos particiones: entrenamiento y prueba.
     
-    Parámetros:
-    -----------
-    X : np.ndarray de forma (n_ejemplos, n_atributos)
-        Matriz de datos.
-    y : np.ndarray de forma (n_ejemplos,)
-        Vector de etiquetas (pueden ser ints o strings).
-    test : float (0 < test < 1)
-        Fracción del total que irá a la partición de prueba
-        (ejemplo: 0.20 → 20% en prueba, 80% en entrenamiento).
-        
-    Devuelve:
-    ---------
-    X_ent, X_pru, y_ent, y_pru : np.ndarray
-        Los cuatro arrays resultantes en el orden:
-          - X_ent (n_ent × m)
-          - X_pru (n_pru × m)
-          - y_ent (n_ent,)
-          - y_pru (n_pru,)
-    """
     # 1) Comprobación de dimensiones
     n_total = X.shape[0]
     if y.shape[0] != n_total:
