@@ -251,12 +251,10 @@ def particion_entr_prueba(X, y, test=0.20):
 
     # 2) Sacar las clases únicas y sus recuentos
     clases_unicas, cuentas_por_clase = np.unique(y, return_counts=True)
-    # Ejemplo: clases_unicas = array(['democrata','republicano']),
-    #          cuentas_por_clase = array([267, 168])
 
     # 3) Lists para ir acumulando índices de cada partición
-    indices_ent = []  # índices que irán a entrenamiento
-    indices_pru = []  # índices que irán a prueba
+    indices_ent = [] 
+    indices_pru = []  
 
     # 4) Iterar por cada clase para repartir estratificadamente
     for idx_clase, c in enumerate(clases_unicas):
@@ -1209,19 +1207,19 @@ def lee_imagenes_digitos(path_imagenes, n_ejemplos):
     with open(path_imagenes, 'r') as f:
         for i in range(n_ejemplos):
             pixeles = []
-            for _ in range(28):
-                linea = f.readline()
+            for _ in range(28): # 28 líneas de altura de cada imagen
+                linea = f.readline() # Lee cada línea
                 if not linea:
                     raise ValueError(f"El fichero {path_imagenes} terminó antes de leer 28 líneas para la imagen {i}.")
-                fila = linea.rstrip("\n")
-                pixeles.extend([0 if ch == ' ' else 1 for ch in fila])
-            X[i, :] = np.array(pixeles, dtype=int)
+                fila = linea.rstrip("\n") # Elimina todos los saltos de línea de cada línea y lo mete en fila
+                pixeles.extend([0 if ch == ' ' else 1 for ch in fila]) 
+            X[i, :] = np.array(pixeles, dtype=int) # Array de cada ejemplo con su secuencia de números aplanados: 784 que son 1 o 0
     return X
 
 def lee_labels_digitos(path_labels):
     with open(path_labels, 'r') as f:
-        y = [int(l.strip()) for l in f.readlines()]
-    return np.array(y, dtype=int)
+        y = [int(l.strip()) for l in f.readlines()] # El método strip() borra todos los caracteres de espacio en blanco                                                      
+    return np.array(y, dtype=int)  # Lee cada línea del fichero de labels y por cada una convierte a un int y lo pasa a un array de labels
 
 ruta_train_labels = "datos/digitdata/traininglabels"
 ruta_valid_labels = "datos/digitdata/validationlabels"
