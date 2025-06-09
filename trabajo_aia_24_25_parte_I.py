@@ -997,26 +997,7 @@ class ArbolDecision:
 class RandomForest:
     def __init__(self, n_arboles=5, prop_muestras=1.0,
                  min_ejemplos_nodo_interior=5, max_prof=10, n_atrs=10, prop_umbral=1.0):
-        """
-        Constructor del clasificador Random Forest.
-
-        Parámetros:
-        -----------
-        n_arboles : int
-            Número de árboles en el bosque.
-        prop_muestras : float (0 < prop_muestras ≤ 1)
-            Proporción de ejemplos del conjunto de entrenamiento original que se
-            seleccionarán (con reemplazo) para entrenar cada árbol (bootstrap).
-        min_ejemplos_nodo_interior : int
-            Se pasa a cada ArbolDecision: número mínimo de ejemplos para dividir un nodo.
-        max_prof : int
-            Se pasa a cada ArbolDecision: profundidad máxima del árbol.
-        n_atrs : int
-            Se pasa a cada ArbolDecision: número de atributos candidatos por árbol.
-        prop_umbral : float (0 < prop_umbral ≤ 1)
-            Se pasa a cada ArbolDecision: proporción de ejemplos a usar en cada nodo
-            para generar candidatos de umbral.
-        """
+        
         self.n_arboles = n_arboles
         self.prop_muestras = prop_muestras
         self.min_ejemplos_nodo_interior = min_ejemplos_nodo_interior
@@ -1082,7 +1063,7 @@ class RandomForest:
         for i in range(n_ejemplos):
             votos = [preds_por_arbol[t][i] for t in range(n_trees)]
             # Contar manualmente sin usar Counter
-            conteo = {}
+            conteo = {} # Diccionario con la clase y el número de votos de esa clase
             for voto in votos:
                 if voto in conteo:
                     conteo[voto] += 1
@@ -1097,7 +1078,7 @@ class RandomForest:
                     max_cuenta = cuenta
                     clase_pred = clase
 
-            preds_final[i] = clase_pred
+            preds_final[i] = clase_pred # Por cada ejemplo devuelve su predicción
 
         return preds_final
 
@@ -1174,48 +1155,50 @@ Xe_cred_ent, Xe_cred_val, ye_cred_ent, ye_cred_val = particion_entr_prueba(
     Xe_cred, ye_cred, test=0.25
 )
 
-# 3) Definimos explícitamente las variables finales que usarás en entrenamiento/validación/prueba
-X_train_credito  = Xe_cred_ent
-y_train_credito  = ye_cred_ent
-X_valid_credito  = Xe_cred_val
-y_valid_credito  = ye_cred_val
-X_test_credito   = Xp_cred
-y_test_credito   = yp_cred
-
-# A partir de aquí, cualquier RandomForest o ArbolDecision que entrenes sobre crédito
-# debe usar X_train_credito, y_train_credito (y opcionalmente X_valid_credito para validación).
-# Y para evaluar el resultado final, usarás X_test_credito, y_test_credito.
-
-
-# # --- 2) DATASET ADULTDATASET --------------------------------------------------
-
-# Antes: cargabas X_adult sin especificar dtype y luego codificabas sólo columnas 4...
-# Lo cambiamos para codificar todas las columnas y evitar que queden strings.
-
-# Cargar todo como object (números o strings):
+# --- 2) DATASET ADULTDATASET --------------------------------------------------
+# Cargar todo el CSV
 df_adult = pd.read_csv("datos/adultDataset.csv", header=None)
-X_adult = df_adult.iloc[:, :-1].to_numpy(dtype=object)
-y_adult = df_adult.iloc[:, -1].to_numpy(dtype=object)
 
-# Ahora aplicamos OrdinalEncoder a TODAS las columnas de X_adult:
-encoder_adult = OrdinalEncoder()
-X_adult_enc = encoder_adult.fit_transform(X_adult)
-# X_adult_enc es un array de floats (sin ningún string).
+# Separar atributos y etiqueta
+X_adult = df_adult.iloc[:, :-1].to_numpy()   # todas las columnas menos la última
+y_adult = df_adult.iloc[:, -1].to_numpy()    # la última columna
 
-# Particion estratificada: 70% ent+val, 30% test
-Xe_adult, Xp_adult, ye_adult, yp_adult = particion_entr_prueba(X_adult_enc, y_adult, test=0.30)
+# 1) Partición estratificada train+val vs test (80%/20%)
+Xe_adult, Xp_adult, ye_adult, yp_adult = particion_entr_prueba(
+    X_adult, y_adult, test=0.20
+)
 
-# De esos 70%, tomar 75% para entrenamiento (0.70×0.75=0.525) y 25% para validación (0.70×0.25=0.175):
+# 2) Del 80% restante, 75% train y 25% validación (=> 60%/20% totales)
 Xe_adult_ent, Xe_adult_val, ye_adult_ent, ye_adult_val = particion_entr_prueba(
     Xe_adult, ye_adult, test=0.25
 )
 
-# Definir las variables finales para usar en ejemplos:
-X_train_adult = Xe_adult_ent
+# 3) Separar numérico (4 primeras columnas) y categórico (resto) en cada subset
+X_ent_num = Xe_adult_ent[:, :4].astype(float)
+X_ent_cat = Xe_adult_ent[:, 4:]
+
+X_val_num = Xe_adult_val[:, :4].astype(float)
+X_val_cat = Xe_adult_val[:, 4:]
+
+X_test_num = Xp_adult[:, :4].astype(float)
+X_test_cat = Xp_adult[:, 4:]
+
+# 4) Ajustar OrdinalEncoder SOLO sobre las columnas categóricas de train
+encoder_adult = OrdinalEncoder()
+X_ent_cat_enc = encoder_adult.fit_transform(X_ent_cat)
+
+# 5) Transformar validación y test con el mismo encoder
+X_val_cat_enc  = encoder_adult.transform(X_val_cat)
+X_test_cat_enc = encoder_adult.transform(X_test_cat)
+
+# 6) Reconstruir los arrays finales concatenando numérico + categórico codificado
+X_train_adult = np.hstack([X_ent_num, X_ent_cat_enc])
 y_train_adult = ye_adult_ent
-X_valid_adult = Xe_adult_val
+
+X_valid_adult = np.hstack([X_val_num, X_val_cat_enc])
 y_valid_adult = ye_adult_val
-X_test_adult  = Xp_adult
+
+X_test_adult  = np.hstack([X_test_num, X_test_cat_enc])
 y_test_adult  = yp_adult
 
 
