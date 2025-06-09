@@ -243,50 +243,39 @@ from carga_datos import *
 # ------------------------------------------------------------------
 
 def particion_entr_prueba(X, y, test=0.20):
-    
-    # 1) Comprobación de dimensiones
+
     n_total = X.shape[0]
     if y.shape[0] != n_total:
         raise ValueError("X e y deben tener el mismo número de filas.")
 
-    # 2) Sacar las clases únicas y sus recuentos
     clases_unicas, cuentas_por_clase = np.unique(y, return_counts=True)
 
-    # 3) Lists para ir acumulando índices de cada partición
     indices_ent = [] 
     indices_pru = []  
 
-    # 4) Iterar por cada clase para repartir estratificadamente
-    for idx_clase, c in enumerate(clases_unicas):
-        # 4.1) Indices de todos los ejemplos de la clase c
-        #     np.where(y == c) devuelve una tupla, tomamos [0] para el array.
-        indices_clase = np.where(y == c)[0].copy()
+
+    for idx_clase, c in enumerate(clases_unicas): # El enumerate convierte las clases unicas en un iterable de pares: (indice, elemento)
         
-        # 4.2) Barajar (aleatorizar) esos índices
+        indices_clase = np.where(y == c)[0].copy() # Devuelve los índices de los valores en que aparece cada clase
+        
         np.random.shuffle(indices_clase)
 
-        # 4.3) Calcular cuántos van a la partición de prueba para esta clase
-        cuenta_c = cuentas_por_clase[idx_clase]
-        n_pru_c = int(np.round(cuenta_c * test))
-        # Ejemplo: si cuenta_c = 168 y test = 1/3 ≈ 0.3333 → n_pru_c ≈ 56
+        cuenta_c = cuentas_por_clase[idx_clase] #  Numero de ejemplos que hay en esa clase
+        n_pru_c = int(np.round(cuenta_c * test)) # Numero de ejemplos que irán a prueba
 
-        # 4.4) Repartir los índices: primeros n_pru_c a prueba, el resto a entrenamiento
-        indices_pru_c = indices_clase[:n_pru_c]
+        indices_pru_c = indices_clase[:n_pru_c] # Dividimos según el numero de ejmplos por prueba
         indices_ent_c = indices_clase[n_pru_c:]
 
-        # 4.5) Agregar a las listas generales
         indices_pru.extend(indices_pru_c.tolist())
         indices_ent.extend(indices_ent_c.tolist())
 
-    # 5) Convertir a arrays y volver a mezclar cada lista por separado
     indices_ent = np.array(indices_ent)
     indices_pru = np.array(indices_pru)
 
     np.random.shuffle(indices_ent)
     np.random.shuffle(indices_pru)
 
-    # 6) Indexar X e y para obtener los cuatro arrays finales
-    X_ent = X[indices_ent]
+    X_ent = X[indices_ent] # Aquí accedemos directamente a los valores de los índices de las listas que hemos creado anteriormente
     y_ent = y[indices_ent]
 
     X_pru = X[indices_pru]
