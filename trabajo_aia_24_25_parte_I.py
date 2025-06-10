@@ -989,13 +989,7 @@ class RandomForest:
         self.arboles = []
 
     def entrena(self, X, y):
-        """
-        Entrena el Random Forest sobre los datos (X, y). Por cada uno de los n_arboles:
-          1) Crear un bootstrap sample de X, y con reemplazo, de tamaño n_bootstrap = round(prop_muestras * n_total).
-          2) Instanciar un ArbolDecision con los hiperparámetros dados.
-          3) Entrenar ese árbol sobre el bootstrap sample.
-          4) Guardar el árbol entrenado en self.arboles.
-        """
+        
         n_total = X.shape[0]
         # Número de ejemplos en cada bootstrap
         n_bootstrap = max(1, int(round(self.prop_muestras * n_total)))
@@ -1021,13 +1015,7 @@ class RandomForest:
             self.arboles.append(árbol)
 
     def clasifica(self, X):
-        """
-        Clasifica un array X (N × m) devolviendo para cada instancia la clase
-        por mayoría de votos entre los árboles del bosque.
-
-        Si no se ha llamado a entrena() con anterioridad (self.arboles vacío),
-        lanza ClasificadorNoEntrenado.
-        """
+        
         if len(self.arboles) == 0:
             raise ClasificadorNoEntrenado("El Random Forest no ha sido entrenado aún.")
 
@@ -1035,18 +1023,17 @@ class RandomForest:
         n_trees = len(self.arboles)
 
         # 1) Cada árbol predice sobre todo X
-        #    Guardamos un listado de arrays, cada uno con shape (n_ejemplos,)
-        preds_por_arbol = [árbol.clasifica(X) for árbol in self.arboles]
+        preds_por_arbol = [árbol.clasifica(X) for árbol in self.arboles] # Devuelve una lista de arrays: preds_por_arbol[t][i] es la predicción del árbol t para la muestra i
 
         # 2) Para cada instancia i, hacemos majority vote entre preds_por_arbol[*][i]
-        preds_final = np.empty(shape=(n_ejemplos,), dtype=object)
+        preds_final = np.empty(shape=(n_ejemplos,), dtype=object) # Creamos un array vacío
         for i in range(n_ejemplos):
-            votos = [preds_por_arbol[t][i] for t in range(n_trees)]
+            votos = [preds_por_arbol[t][i] for t in range(n_trees)] # Por cada iteración mira las predicciones de los árboles para cada muestra
             # Contar manualmente sin usar Counter
             conteo = {} # Diccionario con la clase y el número de votos de esa clase
             for voto in votos:
                 if voto in conteo:
-                    conteo[voto] += 1
+                    conteo[voto] += 1 # Suma 1 si ya ha incluido la clase en el diccionario
                 else:
                     conteo[voto] = 1
 
@@ -1118,22 +1105,17 @@ import pandas as pd
 
 # --- 1) DATASET CRÉDITO -------------------------------------------------------
 
-# 1) Codificar con OrdinalEncoder (todos los atributos son categóricos)
 encoder_cred = OrdinalEncoder()
-# X_credito proviene de carga_datos y es de tipo object (strings)
-X_credito_enc = encoder_cred.fit_transform(X_credito)  # → array de floats
+
+X_credito_enc = encoder_cred.fit_transform(X_credito)  
 
 # 2) Partición estratificada en 60% entrenamiento, 20% validación, 20% prueba
 #    Primero separamos 80% (ent+val) vs. 20% (test):
-Xe_cred, Xp_cred, ye_cred, yp_cred = particion_entr_prueba(
-    X_credito_enc, y_credito, test=0.20
-)
+Xe_cred, Xp_cred, ye_cred, yp_cred = particion_entr_prueba(X_credito_enc, y_credito, test=0.20)
 
 #    A continuación, de ese 80% separamos 75% para entrenamiento y 25% para validación,
 #    de manera que sobre el total quedan 60% entrenamiento y 20% validación:
-Xe_cred_ent, Xe_cred_val, ye_cred_ent, ye_cred_val = particion_entr_prueba(
-    Xe_cred, ye_cred, test=0.25
-)
+Xe_cred_ent, Xe_cred_val, ye_cred_ent, ye_cred_val = particion_entr_prueba(Xe_cred, ye_cred, test=0.25)
 
 # --- 2) DATASET ADULTDATASET --------------------------------------------------
 # Cargar todo el CSV
@@ -1144,14 +1126,10 @@ X_adult = df_adult.iloc[:, :-1].to_numpy()   # todas las columnas menos la últi
 y_adult = df_adult.iloc[:, -1].to_numpy()    # la última columna
 
 # 1) Partición estratificada train+val vs test (80%/20%)
-Xe_adult, Xp_adult, ye_adult, yp_adult = particion_entr_prueba(
-    X_adult, y_adult, test=0.20
-)
+Xe_adult, Xp_adult, ye_adult, yp_adult = particion_entr_prueba(X_adult, y_adult, test=0.20)
 
 # 2) Del 80% restante, 75% train y 25% validación (=> 60%/20% totales)
-Xe_adult_ent, Xe_adult_val, ye_adult_ent, ye_adult_val = particion_entr_prueba(
-    Xe_adult, ye_adult, test=0.25
-)
+Xe_adult_ent, Xe_adult_val, ye_adult_ent, ye_adult_val = particion_entr_prueba(Xe_adult, ye_adult, test=0.25)
 
 # 3) Separar numérico (4 primeras columnas) y categórico (resto) en cada subset
 X_ent_num = Xe_adult_ent[:, :4].astype(float)
@@ -1164,10 +1142,8 @@ X_test_num = Xp_adult[:, :4].astype(float)
 X_test_cat = Xp_adult[:, 4:]
 
 # 4) Ajustar OrdinalEncoder SOLO sobre las columnas categóricas de train
-encoder_adult = OrdinalEncoder(
-    handle_unknown='use_encoded_value',
-    unknown_value=-1
-)
+encoder_adult = OrdinalEncoder(handle_unknown='use_encoded_value',unknown_value=-1)
+
 X_ent_cat_enc = encoder_adult.fit_transform(X_ent_cat)
 
 # 5) Transformar validación y test con el mismo encoder
@@ -1188,14 +1164,18 @@ y_test_adult  = yp_adult
 # --- 3) DATASET DÍGITOS (digitdata) CORREGIDO ------------------------------
 
 def lee_imagenes_digitos(path_imagenes, n_ejemplos):
-    X = np.zeros((n_ejemplos, 28*28), dtype=int)
+
+    X = np.zeros((n_ejemplos, 28*28), dtype=int) # Creamos un array vacío
+
     with open(path_imagenes, 'r') as f:
-        for i in range(n_ejemplos):
+        for i in range(n_ejemplos): # Por cada número de imagen
             pixeles = []
             for _ in range(28): # 28 líneas de altura de cada imagen
                 linea = f.readline() # Lee cada línea
+
                 if not linea:
                     raise ValueError(f"El fichero {path_imagenes} terminó antes de leer 28 líneas para la imagen {i}.")
+                
                 fila = linea.rstrip("\n") # Elimina todos los saltos de línea de cada línea y lo mete en fila
                 pixeles.extend([0 if ch == ' ' else 1 for ch in fila]) 
             X[i, :] = np.array(pixeles, dtype=int) # Array de cada ejemplo con su secuencia de números aplanados: 784 que son 1 o 0
@@ -1266,6 +1246,7 @@ X_test_dg,  y_test_dg  = X_test_digitos,   y_test_digitos
 
 
 #-- CRÉDITO --
+
 # Xe_cred, Xp_cred, ye_cred, yp_cred = particion_entr_prueba(X_credito_enc, y_credito, test=0.20)
 # Xe_cred_ent, Xe_cred_val, ye_cred_ent, ye_cred_val = particion_entr_prueba(Xe_cred, ye_cred, test=0.25)
 
@@ -1320,6 +1301,7 @@ X_test_dg,  y_test_dg  = X_test_digitos,   y_test_digitos
 
 
 # # -- ADULTDATASET --
+
 # # Usar X_adult_enc (floats), no X_adult original con strings
 # Xe_adult, Xp_adult, ye_adult, yp_adult = particion_entr_prueba(X_adult_enc, y_adult, test=0.30)
 # Xe_adult_ent, Xe_adult_val, ye_adult_ent, ye_adult_val = particion_entr_prueba(Xe_adult, ye_adult, test=0.25)
@@ -1373,6 +1355,7 @@ X_test_dg,  y_test_dg  = X_test_digitos,   y_test_digitos
 # print("\n")
 
 # # -- DÍGITOS --
+
 # # Supongamos que en 4.1 hemos creado Ya:
 # #   X_train_dg, y_train_dg, X_valid_dg, y_valid_dg, X_test_dg, y_test_dg
 # lista_n_arboles = [10, 20]
@@ -1424,6 +1407,7 @@ X_test_dg,  y_test_dg  = X_test_digitos,   y_test_digitos
 # print("\n")
 
 # # -- IMDB --
+
 # # IMDB ya viene con X_train_imdb, X_test_imdb, y_train_imdb, y_test_imdb
 # # Sólo necesitamos tomar parte del entrenamiento como validación:
 # Xe_imdb_ent, Xe_imdb_val, ye_imdb_ent, ye_imdb_val = particion_entr_prueba(X_train_imdb, y_train_imdb, test=0.2)
