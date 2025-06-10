@@ -256,7 +256,7 @@ def particion_entr_prueba(X, y, test=0.20):
 
     for idx_clase, c in enumerate(clases_unicas): # El enumerate convierte las clases unicas en un iterable de pares: (indice, elemento)
         
-        indices_clase = np.where(y == c)[0].copy() # Devuelve los índices de los valores en que aparece cada clase
+        indices_clase = np.where(y == c)[0].copy() # Devuelve los índices de los valores en que aparece cada clase. Copy() crea una copia independiente
         
         np.random.shuffle(indices_clase)
 
@@ -692,20 +692,15 @@ def rendimiento(clasif,X,y):
 # 0.9557522123893806
 
 
-# Función auxiliar para calcular entropía en base 2:
+# Función auxiliar para calcular entropía en base 2: La entropía es la base para calcular la ganancia de información que usamos al escoger cada corte en el árbol
 def entropia(y_sub):
-    """
-    Calcula la entropía de un vector de etiquetas y_sub (1D), usando base 2:
-        H = -∑ p_c · log2(p_c),
-    donde p_c = (#ejemplos de clase c) / (total de ejemplos en y_sub).
-    Ignora probabilidades p_c == 0 para evitar log2(0).
-    """
-    clases_sub, cuentas_sub = np.unique(y_sub, return_counts=True)
+    
+    clases_sub, cuentas_sub = np.unique(y_sub, return_counts=True) # Obtenemos el numero de ejemplos de cada clase
     if cuentas_sub.size == 0:
         return 0.0
-    p = cuentas_sub.astype(float) / cuentas_sub.sum()
+    p = cuentas_sub.astype(float) / cuentas_sub.sum() #  Calculamos la probabilidad de cada clase
     p = p[p > 0]
-    return -np.sum(p * np.log2(p))
+    return -np.sum(p * np.log2(p)) # Calculamos la entropía del padre
 
 
 class ArbolDecision:
@@ -724,33 +719,32 @@ class ArbolDecision:
 
     def entrena(self, X, y):
         
-        n_ejemplos, n_atributos_totales = X.shape
+        n_ejemplos, n_atributos_totales = X.shape # Cuenta las filas y columnas
 
-        if self.n_atrs < n_atributos_totales:
-            self.atributos_candidatos = np.random.choice(
-                a       = n_atributos_totales,
-                size    = self.n_atrs,
-                replace = False
+        if self.n_atrs < n_atributos_totales: # Si el numero de atributos que se pide es menor que el total, elegimos un subconjunto aleatorio
+            self.atributos_candidatos = np.random.choice( # Sortea índices de columna. 
+                a       = n_atributos_totales, # Rango de enteros
+                size    = self.n_atrs, # Cuantos índices queremos
+                replace = False # Sin reemplazo para que no se repita ningún atributo
             )
         else:
-            self.atributos_candidatos = np.arange(n_atributos_totales)
+            self.atributos_candidatos = np.arange(n_atributos_totales) # Sino, crea un array con todos los atributos
 
         # Construcción recursiva de todo el árbol:
-        self.raiz = self._construye_arbol_rec(X, y, prof=0)
+        self.raiz = self._construye_arbol_rec(X, y, prof=0) # Método recursivo que construye cada nodo y prof=0 porque partimos de profundidad 0
+                                                            # El nodo resultante se guarda en self.raiz
 
     def _construye_arbol_rec(self, X_n, y_n, prof):
 
-        # 1) Calculamos distribución de clases en este nodo (para hoja o para calculo de distr).
-        clases_sub, cuentas_sub = np.unique(y_n, return_counts=True)
-        dict_distr_padre = {clase: int(cuenta) for clase, cuenta in zip(clases_sub, cuentas_sub)}
-
+        # 1) Calculamos distribución de clases en este nodo 
+        clases_sub, cuentas_sub = np.unique(y_n, return_counts=True) 
+        dict_distr_padre = {clase: int(cuenta) for clase, cuenta in zip(clases_sub, cuentas_sub)} # Diccionario {clase: cuenta}
+                                                                                                    # Almacena la distribución en la hoja y sirve para saber la clase mayoritaria si se convierte en hoja
+        
         # 2) Condiciones de parada (creación de hoja):
-        #    a) prof ≥ max_prof
-        #    b) len(y_n) < min_ejemplos_nodo_interior
-        #    c) todas las etiquetas de y_n son iguales (pureza total)
-        if (prof >= self.max_prof) or (len(y_n) < self.min_ejemplos_nodo_interior) or (clases_sub.size == 1):
-            idx_mayor = np.argmax(cuentas_sub)
-            clase_mayoritaria = clases_sub[idx_mayor]
+        if (prof >= self.max_prof) or (len(y_n) < self.min_ejemplos_nodo_interior) or (clases_sub.size == 1): # Nodo puro
+            idx_mayor = np.argmax(cuentas_sub) # Devuelve el índice de la clase con más ejemplos
+            clase_mayoritaria = clases_sub[idx_mayor] # Devuelve la clase mayoritaria sabiendo el índice con más ejemplos
             return Nodo(
                 atributo = None,
                 umbral   = None,
@@ -768,27 +762,26 @@ class ArbolDecision:
 
         # 4) Para cada atributo candidato (subconjunto sorteado en entrena()):
         for A in self.atributos_candidatos:
-            n_nodo = X_n.shape[0]
-            # 4.1) Submuestreo de ejemplos para hallar candidatos de umbral:
-            k = max(1, int(np.round(self.prop_umbral * n_nodo)))
-            indices_muestra = np.random.choice(n_nodo, size=k, replace=False)
+            n_nodo = X_n.shape[0] # Número total de ejemplos
+            k = max(1, int(np.round(self.prop_umbral * n_nodo))) # k: número de muestras para generar umbrales
+            indices_muestra = np.random.choice(n_nodo, size=k, replace=False) # Índices aleatorios sin reemplazo entre las n_nodo muestras
 
-            Xm = X_n[indices_muestra, A] # A es el atributo candidato que hay en ese momento en el bucle 
+            Xm = X_n[indices_muestra, A] # A es el atributo candidato que hay en ese momento en el bucle. Devuelve los ejemplos de los índices aleatorios
             ym = y_n[indices_muestra]
 
             # 4.2) Ordenar la muestra por valor de Xm para detectar cambios de clase vecinos
-            orden_muestra = np.argsort(Xm)
-            Xm_orden = Xm[orden_muestra]
-            ym_orden = ym[orden_muestra]
+            orden_muestra = np.argsort(Xm) # Devuelve los índices ordenados
+            Xm_orden = Xm[orden_muestra] # Los ejemplos ordenados
+            ym_orden = ym[orden_muestra] # Las etiquetas ordenadas
 
             # 4.3) Construir lista de umbrales candidatos: puntos medios donde cambia la clase
             umbrales_A = []
             for i in range(len(Xm_orden) - 1): # Cogemos de la lista de clases el momento en el que cambian y calculamos el umbral y lo metemos en la lista de umbrales
-                if ym_orden[i] != ym_orden[i + 1]:
+                if ym_orden[i] != ym_orden[i + 1]: # Entre 1->2 clases [0,1] cambian -> umbral
                     u = (Xm_orden[i] + Xm_orden[i + 1]) / 2.0
-                    umbrales_A.append(u)
+                    umbrales_A.append(u) # Metemos el umbral en la lista
 
-            if len(umbrales_A) == 0:
+            if len(umbrales_A) == 0: 
                 continue  # No hay cambio de clase en la muestra → ningún candidato para este atributo
 
             # 4.4) Para cada candidato u, calculamos la ganancia de información
@@ -808,8 +801,8 @@ class ArbolDecision:
                 N_izq  = len(y_izq)
                 N_der  = len(y_der)
 
-                H_hijos = (N_izq / N_nodo) * H_izq + (N_der / N_nodo) * H_der
-                gain    = H_padre - H_hijos
+                H_hijos = (N_izq / N_nodo) * H_izq + (N_der / N_nodo) * H_der # Entropía de los hijos
+                gain    = H_padre - H_hijos # Ganancia de información
 
                 if gain > mejor_gain: # Si gain es mejor que el anterior lo actualizamos
                     mejor_gain   = gain
@@ -818,8 +811,8 @@ class ArbolDecision:
 
         # 5) Si no encontramos ningún split con ganancia positiva, devolvemos un nodo hoja
         if (mejor_A is None) or (mejor_gain <= 0):
-            idx_mayor = np.argmax(cuentas_sub)
-            clase_mayoritaria = clases_sub[idx_mayor]
+            idx_mayor = np.argmax(cuentas_sub) # Devuelve el índice de la clase que más ejemplos tiene
+            clase_mayoritaria = clases_sub[idx_mayor] 
             return Nodo(
                 atributo = None,
                 umbral   = None,
@@ -848,34 +841,34 @@ class ArbolDecision:
             clase    = None
         )
 
-    def clasifica(self, X): # FACIL
+    def clasifica(self, X): 
         
         if self.raiz is None:
             raise ClasificadorNoEntrenado("El árbol no ha sido entrenado aún.")
 
         n_ejemplos = X.shape[0]
-        preds = np.empty(shape=(n_ejemplos,), dtype=object)
+        preds = np.empty(shape=(n_ejemplos,), dtype=object) # Array vacío donde meteremos el valor de las predicciones
 
         for i in range(n_ejemplos):
-            nodo = self.raiz
-            # Descender por el árbol hasta llegar a una hoja
-            while not nodo.es_hoja():
-                if X[i, nodo.atributo] <= nodo.umbral:
+            nodo = self.raiz # Para cada ejemplo inicializamos un nodo que apunte a la raíz del árbol
+            
+            while not nodo.es_hoja(): # Baja niveles hasta que nodo sea una hoja
+                if X[i, nodo.atributo] <= nodo.umbral: # Si el ejemplo de ese atributo es menor que el umbral vamos al nodo izquierdo
                     nodo = nodo.izq
                 else:
                     nodo = nodo.der
-            preds[i] = nodo.clase
+            preds[i] = nodo.clase # Al terminar el bucle, "nodo" es una hoja y tiene atributo clase mayoritaria
 
         return preds
 
-    def clasifica_prob(self, x): # FACIL
+    def clasifica_prob(self, x): # Probabilidades para un muestra x que al descender cae precisamente en esa hoja
         
         if self.raiz is None:
             raise ClasificadorNoEntrenado("El árbol no ha sido entrenado aún.")
 
         nodo = self.raiz
         while not nodo.es_hoja():
-            if x[nodo.atributo] <= nodo.umbral:
+            if x[nodo.atributo] <= nodo.umbral: # Itera sobre los nodos con una única muestra y no sobre un array de muestras
                 nodo = nodo.izq
             else:
                 nodo = nodo.der
@@ -892,11 +885,11 @@ class ArbolDecision:
 
     def _imprime_nodo(self, nodo, prof, nombre_atrs, nombre_clase):
         
-        espacios = "    " * prof
+        espacios = "    " * prof # Prefijo de 4 espacios por cada nivel de profundidad
 
         if nodo.es_hoja():
-            dist_limpia = { (k.item() if isinstance(k, np.generic) else k): v
-                for k, v in nodo.distr.items() }
+            dist_limpia = { (k.item() if isinstance(k, np.generic) else k): v # Si k es instancia de np.generic, k.item() lo convierte a un tipo nativo de Python
+                for k, v in nodo.distr.items() } # distr: diccionario con {clave_numpy: cuenta}; dist_limpia es un diccionario igual pero con las claves tipo nativo
             print(f"{espacios}{nombre_clase}: {nodo.clase} -- {dist_limpia}")
         else:
             atr = nombre_atrs[nodo.atributo]
@@ -1144,7 +1137,7 @@ Xe_cred_ent, Xe_cred_val, ye_cred_ent, ye_cred_val = particion_entr_prueba(
 
 # --- 2) DATASET ADULTDATASET --------------------------------------------------
 # Cargar todo el CSV
-df_adult = pd.read_csv("datos/adultDataset.csv", header=None)
+df_adult = pd.read_csv("datos/adultDataset.csv")
 
 # Separar atributos y etiqueta
 X_adult = df_adult.iloc[:, :-1].to_numpy()   # todas las columnas menos la última
@@ -1171,7 +1164,10 @@ X_test_num = Xp_adult[:, :4].astype(float)
 X_test_cat = Xp_adult[:, 4:]
 
 # 4) Ajustar OrdinalEncoder SOLO sobre las columnas categóricas de train
-encoder_adult = OrdinalEncoder()
+encoder_adult = OrdinalEncoder(
+    handle_unknown='use_encoded_value',
+    unknown_value=-1
+)
 X_ent_cat_enc = encoder_adult.fit_transform(X_ent_cat)
 
 # 5) Transformar validación y test con el mismo encoder
