@@ -256,8 +256,8 @@ def particion_entr_prueba(X, y, test=0.20):
 
     for idx_clase, c in enumerate(clases_unicas): # El enumerate convierte las clases unicas en un iterable de pares: (indice, elemento)
         
-        indices_clase = np.where(y == c)[0].copy() # Devuelve los índices de los valores en que aparece cada clase. Copy() crea una copia independiente
-        
+        indices_clase = np.where(y == c)[0].copy() # Devuelve los índices de los valores que son TRUE . Copy() crea una copia independiente y por lo tanto cualquier modificación a indices_clase sólo afectaría a el array y no a otra estructura
+                                                    # El np.where devuelve una tupla con el array de índices en la primera posición. Por eso el [0] accede a esa posicion
         np.random.shuffle(indices_clase)
 
         cuenta_c = cuentas_por_clase[idx_clase] #  Numero de ejemplos que hay en esa clase
@@ -266,7 +266,7 @@ def particion_entr_prueba(X, y, test=0.20):
         indices_pru_c = indices_clase[:n_pru_c] # Dividimos según el numero de ejmplos por prueba
         indices_ent_c = indices_clase[n_pru_c:]
 
-        indices_pru.extend(indices_pru_c.tolist())
+        indices_pru.extend(indices_pru_c.tolist()) # tolist convierte a lista para poder hacer .extend
         indices_ent.extend(indices_ent_c.tolist())
 
     indices_ent = np.array(indices_ent)
@@ -275,7 +275,7 @@ def particion_entr_prueba(X, y, test=0.20):
     np.random.shuffle(indices_ent)
     np.random.shuffle(indices_pru)
 
-    X_ent = X[indices_ent] # Aquí accedemos directamente a los valores de los índices de las listas que hemos creado anteriormente
+    X_ent = X[indices_ent] # Aquí accedemos directamente a los valores de los índices de los arrays que hemos creado anteriormente
     y_ent = y[indices_ent]
 
     X_pru = X[indices_pru]
@@ -692,14 +692,14 @@ def rendimiento(clasif,X,y):
 # 0.9557522123893806
 
 
-# Función auxiliar para calcular entropía en base 2: La entropía es la base para calcular la ganancia de información que usamos al escoger cada corte en el árbol
-def entropia(y_sub):
-    
+# Función auxiliar para calcular entropía en base 2: La entropía es la base para calcular la ganancia de información de cada posible split y así decidir cuál es el corte que mejor separa las clases
+def entropia(y_sub): # Antes de dividir un nodo calculamos su entropía H padre. Para un posible split calculamos la entropía Hizq y Hder.
+                    # IG = Hpadre - Hhijos -> Buscamos el split que maximice la reducción de entropía. Vamos calculando la IG en cada split y éste irá disminuyendo hasta llegar a 0 en un nodo hoja    
     clases_sub, cuentas_sub = np.unique(y_sub, return_counts=True) # Obtenemos el numero de ejemplos de cada clase
     if cuentas_sub.size == 0:
         return 0.0
-    p = cuentas_sub.astype(float) / cuentas_sub.sum() #  Calculamos la probabilidad de cada clase
-    p = p[p > 0]
+    p = cuentas_sub.astype(float) / cuentas_sub.sum() #  Calculamos la probabilidad de cada clase. p es un array de nº de ejemplos por clase/nº total
+    p = p[p > 0] # Para evitar calcular log2(0)
     return -np.sum(p * np.log2(p)) # Calculamos la entropía del padre
 
 
@@ -712,7 +712,7 @@ class ArbolDecision:
         self.prop_umbral               = prop_umbral
 
         # Hasta que se entrene, self.raiz queda en None:
-        self.raiz = None
+        self.raiz = None # Es el nodo raíz
 
         # Aquí guardaremos el array de índices de atributos candidatos (subconjunto aleatorio).
         self.atributos_candidatos = None
@@ -802,7 +802,7 @@ class ArbolDecision:
                 N_der  = len(y_der)
 
                 H_hijos = (N_izq / N_nodo) * H_izq + (N_der / N_nodo) * H_der # Entropía de los hijos
-                gain    = H_padre - H_hijos # Ganancia de información
+                gain    = H_padre - H_hijos # Ganancia de información. IG alto indica que los hijos son casi puros y por lo tanto que dividen muy bien las clases y obtienen gran ganancia de información
 
                 if gain > mejor_gain: # Si gain es mejor que el anterior lo actualizamos
                     mejor_gain   = gain
@@ -861,7 +861,7 @@ class ArbolDecision:
 
         return preds
 
-    def clasifica_prob(self, x): # Probabilidades para un muestra x que al descender cae precisamente en esa hoja
+    def clasifica_prob(self, x): # Probabilidades de cada clase por cada hoja
         
         if self.raiz is None:
             raise ClasificadorNoEntrenado("El árbol no ha sido entrenado aún.")
@@ -898,8 +898,6 @@ class ArbolDecision:
             self._imprime_nodo(nodo.izq, prof + 1, nombre_atrs, nombre_clase)
             print(f"{espacios}{atr} >  {um:.3f}")
             self._imprime_nodo(nodo.der, prof + 1, nombre_atrs, nombre_clase)
-
-
 
 
 
@@ -1109,16 +1107,14 @@ encoder_cred = OrdinalEncoder()
 
 X_credito_enc = encoder_cred.fit_transform(X_credito)  
 
-# 2) Partición estratificada en 60% entrenamiento, 20% validación, 20% prueba
 #    Primero separamos 80% (ent+val) vs. 20% (test):
 Xe_cred, Xp_cred, ye_cred, yp_cred = particion_entr_prueba(X_credito_enc, y_credito, test=0.20)
 
-#    A continuación, de ese 80% separamos 75% para entrenamiento y 25% para validación,
 #    de manera que sobre el total quedan 60% entrenamiento y 20% validación:
 Xe_cred_ent, Xe_cred_val, ye_cred_ent, ye_cred_val = particion_entr_prueba(Xe_cred, ye_cred, test=0.25)
 
 # --- 2) DATASET ADULTDATASET --------------------------------------------------
-# Cargar todo el CSV
+
 df_adult = pd.read_csv("datos/adultDataset.csv")
 
 # Separar atributos y etiqueta
@@ -1150,7 +1146,7 @@ X_ent_cat_enc = encoder_adult.fit_transform(X_ent_cat)
 X_val_cat_enc  = encoder_adult.transform(X_val_cat)
 X_test_cat_enc = encoder_adult.transform(X_test_cat)
 
-# 6) Reconstruir los arrays finales concatenando numérico + categórico codificado
+# 6) Reconstruir los arrays finales concatenando numérico + categórico codificado. hstack concatena horizontalmente
 X_train_adult = np.hstack([X_ent_num, X_ent_cat_enc])
 y_train_adult = ye_adult_ent
 
@@ -1168,7 +1164,7 @@ def lee_imagenes_digitos(path_imagenes, n_ejemplos):
     X = np.zeros((n_ejemplos, 28*28), dtype=int) # Creamos un array vacío
 
     with open(path_imagenes, 'r') as f:
-        for i in range(n_ejemplos): # Por cada número de imagen
+        for i in range(n_ejemplos): # Por cada imagen 
             pixeles = []
             for _ in range(28): # 28 líneas de altura de cada imagen
                 linea = f.readline() # Lee cada línea
@@ -1183,7 +1179,7 @@ def lee_imagenes_digitos(path_imagenes, n_ejemplos):
 
 def lee_labels_digitos(path_labels):
     with open(path_labels, 'r') as f:
-        y = [int(l.strip()) for l in f.readlines()] # El método strip() borra todos los caracteres de espacio en blanco                                                      
+        y = [int(l.strip()) for l in f.readlines()] # El método strip() borra todos los caracteres de espacio en blanco (/t-/n-/r,etc)                                                     
     return np.array(y, dtype=int)  # Lee cada línea del fichero de labels y por cada una convierte a un int y lo pasa a un array de labels
 
 ruta_train_labels = "datos/digitdata/traininglabels"
