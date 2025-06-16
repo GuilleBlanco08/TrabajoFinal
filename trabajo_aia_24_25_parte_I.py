@@ -1238,8 +1238,68 @@ X_test_dg,  y_test_dg  = X_test_digitos,   y_test_digitos
 
 # ----------------------------
 
+# A continuación se describen las mejores combinaciones encontradas para cada dataset:
+
+# ── CRÉDITO ────────────────────────────────────────
+# Combinaciones probadas (ejemplos):
+# lista_n_arboles = [10, 20]
+# lista_prop_muestras = [0.8, 1.0]
+# lista_min_ej = [5, 10]
+# lista_max_prof = [10]
+# lista_n_atrs = [6, 10]
+# lista_prop_umb = [0.8, 1.0]
+
+# Mejor combinación obtenida:
+# (n_arboles=10, prop_muestras=0.8, min_ejemplos=5, max_prof=10, n_atrs=10, prop_umbral=0.8)
+# Rendimiento en validación: 0.9461538461538461
+# Rendimiento final en test: 0.9153846153846154
+# ----------------------------
+
+# ── ADULTDATASET ────────────────────────────────────────
+# lista_n_arboles     = [5]
+# lista_prop_muestras = [1.0]
+# lista_min_ej        = [10]
+# lista_max_prof      = [10]
+# lista_n_atrs        = [10]
+# lista_prop_umb      = [0.8, 1.0]
+
+# Mejor combinación obtenida:
+# (n_arboles=5, prop_muestras=1.0, min_ejemplos=10, max_prof=10, n_atrs=10, prop_umbral=1.0)
+# Rendimiento en validación: 0.8494208494208494
+# Rendimiento final en test: 0.8523751023751024
+# ----------------------------
+
+# ── DÍGITOS ────────────────────────────────────────
+# Combinaciones probadas (ejemplos):
+# lista_n_arboles = [10]
+# lista_prop_muestras = [1.0]
+# lista_min_ej = [3]
+# lista_max_prof = [5]
+# lista_n_atrs = [50]
+# lista_prop_umb = [1.0]
 
 
+# Mejor combinación obtenida:
+# (n_arboles=20, prop_muestras=0.8, min_ejemplos=3, max_prof=5, n_atrs=50, prop_umbral=0.8)
+# Rendimiento en validación: 0.787
+# Rendimiento final en test: 0.748
+# ----------------------------
+
+# ── IMDB ────────────────────────────────────────
+# Combinaciones probadas (ejemplos):
+# lista_n_arboles = [5, 10]
+# lista_prop_muestras = [0.8, 1.0]
+# lista_min_ej = [3, 5]
+# lista_max_prof = [5, 10]
+# lista_n_atrs = [80]
+# lista_prop_umb = [0.8, 1.0]
+#
+# Mejor combinacion obtenida:
+# (n_arboles=10, prop_muestras=0.8, min_ejemplos=3, max_prof=10, n_atrs=60, prop_umbral=1.0)
+# Rendimiento en validación: 0.6925
+# Rendimiento final en test: 0.69
+#
+# ----------------------------
 
 #-- CRÉDITO --
 
