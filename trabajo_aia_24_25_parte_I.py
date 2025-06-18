@@ -256,7 +256,7 @@ def particion_entr_prueba(X, y, test=0.20):
 
     for idx_clase, c in enumerate(clases_unicas): # El enumerate convierte las clases unicas en un iterable de pares: (indice, elemento)
         
-        indices_clase = np.where(y == c)[0].copy() # Devuelve los índices de los valores que son TRUE . Copy() crea una copia independiente y por lo tanto cualquier modificación a indices_clase sólo afectaría a el array y no a otra estructura
+        indices_clase = np.where(y == c)[0].copy() # Devuelve los índices de los valores que son TRUE . Copy() crea una copia independiente (array independiente) y no una vista o enlace que comparta datos con otra estructura interna
                                                     # El np.where devuelve una tupla con el array de índices en la primera posición. Por eso el [0] accede a esa posicion
         np.random.shuffle(indices_clase)
 
@@ -692,9 +692,9 @@ def rendimiento(clasif,X,y):
 # 0.9557522123893806
 
 
-# Función auxiliar para calcular entropía en base 2: La entropía es la base para calcular la ganancia de información de cada posible split y así decidir cuál es el corte que mejor separa las clases
+# La entropía es la base para calcular la ganancia de información de cada posible split y así decidir cuál es el corte que mejor separa las clases
 def entropia(y_sub): # Antes de dividir un nodo calculamos su entropía H padre. Para un posible split calculamos la entropía Hizq y Hder.
-                    # IG = Hpadre - Hhijos -> Buscamos el split que maximice la reducción de entropía. Vamos calculando la IG en cada split y éste irá disminuyendo hasta llegar a 0 en un nodo hoja    
+                    # IG = Hpadre - Hhijos -> Buscamos el split que maximice la reducción de entropía. Vamos calculando la IG en cada split y la entropía irá disminuyendo    
     clases_sub, cuentas_sub = np.unique(y_sub, return_counts=True) # Obtenemos el numero de ejemplos de cada clase
     if cuentas_sub.size == 0:
         return 0.0
@@ -803,7 +803,8 @@ class ArbolDecision:
 
                 H_hijos = (N_izq / N_nodo) * H_izq + (N_der / N_nodo) * H_der # Entropía de los hijos
                 gain    = H_padre - H_hijos # Ganancia de información. IG alto indica que los hijos son casi puros y por lo tanto que dividen muy bien las clases y obtienen gran ganancia de información
-
+                # IG grande -> H hijos pequeño -> hijos casi puros -> split muy efectivo
+                # IG pequeño -> H hijos = H padre -> ningún beneficio al dividir
                 if gain > mejor_gain: # Si gain es mejor que el anterior lo actualizamos
                     mejor_gain   = gain
                     mejor_A      = int(A)
@@ -881,6 +882,7 @@ class ArbolDecision:
         
         if self.raiz is None:
             raise ClasificadorNoEntrenado("El árbol no ha sido entrenado aún.")
+        
         self._imprime_nodo(self.raiz, prof=0, nombre_atrs=nombre_atrs, nombre_clase=nombre_clase)
 
     def _imprime_nodo(self, nodo, prof, nombre_atrs, nombre_clase):
@@ -1026,8 +1028,8 @@ class RandomForest:
         # 2) Para cada instancia i, hacemos majority vote entre preds_por_arbol[*][i]
         preds_final = np.empty(shape=(n_ejemplos,), dtype=object) # Creamos un array vacío
         for i in range(n_ejemplos):
-            votos = [preds_por_arbol[t][i] for t in range(n_trees)] # Por cada iteración mira las predicciones de los árboles para cada muestra
-            # Contar manualmente sin usar Counter
+            votos = [preds_por_arbol[t][i] for t in range(n_trees)] # Por cada iteración mira las predicciones de los árboles para cada muestra. En el bucle recorre por cada vuelta la predicción de una muestra por cada árbol
+
             conteo = {} # Diccionario con la clase y el número de votos de esa clase
             for voto in votos:
                 if voto in conteo:
