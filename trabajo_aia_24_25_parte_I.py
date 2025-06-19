@@ -245,6 +245,8 @@ from carga_datos import *
 def particion_entr_prueba(X, y, test=0.20):
 
     n_total = X.shape[0]
+
+    # Comrobamos que X e y coincidan con el número de muestras
     if y.shape[0] != n_total:
         raise ValueError("X e y deben tener el mismo número de filas.")
 
@@ -253,7 +255,7 @@ def particion_entr_prueba(X, y, test=0.20):
     indices_ent = [] 
     indices_pru = []  
 
-
+    # Genera índices estratificados por clase para entrenamiento y prueba
     for idx_clase, c in enumerate(clases_unicas): 
         
         indices_clase = np.where(y == c)[0].copy() 
@@ -269,6 +271,7 @@ def particion_entr_prueba(X, y, test=0.20):
         indices_pru.extend(indices_pru_c.tolist()) 
         indices_ent.extend(indices_ent_c.tolist())
 
+    # Baraja índices y construye los subconjuntos de datos
     indices_ent = np.array(indices_ent)
     indices_pru = np.array(indices_pru)
 
@@ -282,6 +285,7 @@ def particion_entr_prueba(X, y, test=0.20):
     y_pru = y[indices_pru]
 
     return X_ent, X_pru, y_ent, y_pru
+
 
 # ===============================================
 # EJERCICIO 2: IMPLEMENTACIÓN ÁRBOLES DE DECISIÓN
@@ -710,6 +714,7 @@ class ArbolDecision:
         self.max_prof                  = max_prof
         self.n_atrs                    = n_atrs
         self.prop_umbral               = prop_umbral
+        # Raíz del árbol y lista de atributos candidatos (se inicializan en entrena)
         self.raiz = None 
         self.atributos_candidatos = None
 
@@ -717,6 +722,8 @@ class ArbolDecision:
         
         n_ejemplos, n_atributos_totales = X.shape 
 
+        # Si el número de atributos pasado como parámetro es menor que el total de atributos entonces elegimos aleatoriamente  atributos
+        # sin sobrepasar el tamaño maximo y sin reemplazo.
         if self.n_atrs < n_atributos_totales: 
             self.atributos_candidatos = np.random.choice( 
                 a       = n_atributos_totales, 
@@ -724,19 +731,22 @@ class ArbolDecision:
                 replace = False 
             )
         else:
+            # Sino, entrenamos el árbol con todos los atributos
             self.atributos_candidatos = np.arange(n_atributos_totales) 
 
-        
+        # LLamada a a la función "_construye_arbol_rec"
         self.raiz = self._construye_arbol_rec(X, y, prof=0) 
 
     def _construye_arbol_rec(self, X_n, y_n, prof):
 
        
-        clases_sub, cuentas_sub = np.unique(y_n, return_counts=True) 
+        clases_sub, cuentas_sub = np.unique(y_n, return_counts=True)
+        # Diccionario formado por cada clase y el número de muestras para cada clase 
         dict_distr_padre = {clase: int(cuenta) for clase, cuenta in zip(clases_sub, cuentas_sub)} 
         
         # Condiciones de parada (creación de hoja):
         if (prof >= self.max_prof) or (len(y_n) < self.min_ejemplos_nodo_interior) or (clases_sub.size == 1): 
+            # Si se cumple una de esas condiciones de parada -> Devolvemos un nodo con el diccionario y la clase mayoritaria
             idx_mayor = np.argmax(cuentas_sub) 
             clase_mayoritaria = clases_sub[idx_mayor] 
             return Nodo(
@@ -757,16 +767,19 @@ class ArbolDecision:
         # Para cada atributo candidato:
         for A in self.atributos_candidatos:
             n_nodo = X_n.shape[0] 
+            # k es el número de muestras obtenido mediante la proporción del umbral que utilizamos para buscar el atributo candidato
             k = max(1, int(np.round(self.prop_umbral * n_nodo)))
             indices_muestra = np.random.choice(n_nodo, size=k, replace=False) 
 
             Xm = X_n[indices_muestra, A] 
             ym = y_n[indices_muestra]
 
+            # Ordenamos las muestras para poder comparar los cambios de clase y por tanto clacular posibles umbrales para el candidato A
             orden_muestra = np.argsort(Xm) 
             Xm_orden = Xm[orden_muestra]
             ym_orden = ym[orden_muestra] 
 
+            # Si hay un cambio de clase calculamos el corte entre los dos valores de la clase
             umbrales_A = []
             for i in range(len(Xm_orden) - 1):
                 if ym_orden[i] != ym_orden[i + 1]: 
@@ -776,6 +789,8 @@ class ArbolDecision:
             if len(umbrales_A) == 0: 
                 continue  
 
+            # Por cada umbral calculado para el atributo A calculamos la ganancia de información y comprobamos si es mayor que la anterior
+            # hasta obtener la mejor
             for u in umbrales_A:
                 mask_izq = (X_n[:, A] <= u) 
                 mask_der = ~mask_izq
@@ -785,6 +800,7 @@ class ArbolDecision:
                 y_izq = y_n[mask_izq] 
                 y_der = y_n[mask_der]
 
+                # Calculamos la entropía para los hijos mediante la función auxiliar con las etiquetas según el umbral
                 H_izq = entropia(y_izq) 
                 H_der = entropia(y_der)
 
@@ -792,6 +808,9 @@ class ArbolDecision:
                 N_izq  = len(y_izq)
                 N_der  = len(y_der)
 
+                # Calculamos la entropía de los dos hijos y se la restamos a la entropía del padre obteniendo así la ganancia de información
+                # Cuanto mayor ganancia mejor ya que indica que la entropía de los hijos será pequeña y por lo tanto el corte dividirá muy bien
+                # las clases según el umbral
                 H_hijos = (N_izq / N_nodo) * H_izq + (N_der / N_nodo) * H_der
                 gain    = H_padre - H_hijos 
                 
@@ -800,6 +819,7 @@ class ArbolDecision:
                     mejor_A      = int(A)
                     mejor_umbral = float(u)
        
+        # Si no hemos obtenido el mejor atributo o la ganancia es menor que 0 -> Devolvemos un nodo con el diccionario y la clase mayoritaria
         if (mejor_A is None) or (mejor_gain <= 0):
             idx_mayor = np.argmax(cuentas_sub) 
             clase_mayoritaria = clases_sub[idx_mayor] 
@@ -812,13 +832,18 @@ class ArbolDecision:
                 clase    = clase_mayoritaria
             )
         
+        # Una vez obtenido el mejor atributo y el mejor umbral, dividimos las muestras y las etiquetas según ese umbral y las repartimos 
+        # para el nodo izquierdo si <= umbral y para el nodo derecho si > umbral.
         mask_split = (X_n[:, mejor_A] <= mejor_umbral) 
         X_izq, y_izq = X_n[mask_split],    y_n[mask_split]
         X_der, y_der = X_n[~mask_split],   y_n[~mask_split]
 
+        # Llamamos de forma recursiva a la función pero con los valores ya divididos en el nodo izquierdo y derecho.
         nodo_izq = self._construye_arbol_rec(X_izq, y_izq, prof + 1)
         nodo_der = self._construye_arbol_rec(X_der, y_der, prof + 1)
 
+        # Por último devolvemos el nodo actual con su mejor atributo, mejor umbral, el nodo a su izquierda, el nodo a su derecha,
+        # el diccionario y la clase mayoritaria es igual a None ya que no es un nodo hoja
         return Nodo(
             atributo = mejor_A,
             umbral   = mejor_umbral,
@@ -834,8 +859,11 @@ class ArbolDecision:
             raise ClasificadorNoEntrenado("El árbol no ha sido entrenado aún.")
 
         n_ejemplos = X.shape[0]
+        # Creamos un array que rellenaremos con las predicciones de cada muestra
         preds = np.empty(shape=(n_ejemplos,), dtype=object)
 
+        # Por cada muestra iniciamos el nodo raíz y vamos bajando según si la muestra es menor o mayor que el umbral hasta llegar
+        # a un nodo hoja.
         for i in range(n_ejemplos):
             nodo = self.raiz 
             
@@ -844,6 +872,7 @@ class ArbolDecision:
                     nodo = nodo.izq
                 else:
                     nodo = nodo.der
+            # Una vez llegado al nodo hoja cogemos la clase mayoritaria de ese nodo y la añadimos al array de predicciones
             preds[i] = nodo.clase 
 
         return preds
@@ -853,15 +882,20 @@ class ArbolDecision:
         if self.raiz is None:
             raise ClasificadorNoEntrenado("El árbol no ha sido entrenado aún.")
 
+        # A diferencia de la función clasifica, aquí inicializamos el nodo raíz sólo una vez ya que buscamos 
+        # las probabilidades para una sola muestra
         nodo = self.raiz
+
         while not nodo.es_hoja():
             if x[nodo.atributo] <= nodo.umbral: 
                 nodo = nodo.izq
             else:
                 nodo = nodo.der
 
+        # Una vez hemos llegado al nodo hoja obtenemos el diccionario y calculamos la suma total de las muestras
         dist = nodo.distr 
         total = sum(dist.values())
+        # Devolvemos la clase y su probabilidad calculada mediante el número de muestras de esa clase entre el número total de muestras
         return {clase: cuenta / total for clase, cuenta in dist.items()} 
 
     def imprime_arbol(self, nombre_atrs, nombre_clase):
@@ -869,16 +903,22 @@ class ArbolDecision:
         if self.raiz is None:
             raise ClasificadorNoEntrenado("El árbol no ha sido entrenado aún.")
         
+        # LLamamos a una función auxiliar para imprimir cada nodo
         self._imprime_nodo(self.raiz, prof=0, nombre_atrs=nombre_atrs, nombre_clase=nombre_clase)
 
     def _imprime_nodo(self, nodo, prof, nombre_atrs, nombre_clase):
         
+        # Añadimos sangría según la profundidad en la que se encuentre
         espacios = "    " * prof 
 
+        # Si el nodo es una hoja, obtenemos el diccionario de ese nodo y mostramos el nombre de la clase, la clase mayoritaria
+        # y las clases y su número de muestras respectivas según el diccionario del nodo 
         if nodo.es_hoja():
             dist_limpia = { (k.item() if isinstance(k, np.generic) else k): v 
                 for k, v in nodo.distr.items() } 
             print(f"{espacios}{nombre_clase}: {nodo.clase} -- {dist_limpia}")
+        # Sino, obtenemos el atributo y el umbral del nodo en el que se encuentra, imprimimos los valores en pantalla y llamamos
+        # de forma recursiva a la función "imprime_nodo" pero con los nodos izquierdo y derecho 
         else:
             atr = nombre_atrs[nodo.atributo]
             um  = nodo.umbral
@@ -971,15 +1011,18 @@ class RandomForest:
         self.n_atrs = n_atrs
         self.prop_umbral = prop_umbral
 
+        # Lista donde iremos añadiendo los árboles que entrenemos
         self.arboles = []
 
     def entrena(self, X, y):
         
         n_total = X.shape[0]
         
+        # Calculamos el bootstrap que utilizaremos para entrenar cada árbol
         n_bootstrap = max(1, int(round(self.prop_muestras * n_total)))
 
         self.arboles = []
+        # Para cada árbol según el "n_arboles" de la clase "RandomForest" 
         for _ in range(self.n_arboles):
            
             idxs = np.random.choice(n_total, size=n_bootstrap, replace=True)
