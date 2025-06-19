@@ -1025,11 +1025,12 @@ class RandomForest:
         # Para cada árbol según el "n_arboles" de la clase "RandomForest" 
         for _ in range(self.n_arboles):
            
+            # Utilizamos un subconjunto aleatorio de muestras (bootstrap)
             idxs = np.random.choice(n_total, size=n_bootstrap, replace=True)
             X_bs = X[idxs]
             y_bs = y[idxs]
 
-            
+            # Creamos el árbol con sus atributos por defecto
             árbol = ArbolDecision(
                 min_ejemplos_nodo_interior=self.min_ejemplos_nodo_interior,
                 max_prof=self.max_prof,
@@ -1037,8 +1038,10 @@ class RandomForest:
                 prop_umbral=self.prop_umbral
             )
            
+            # Entrenamos el árbol con el subconjunto de muestras y etiquetas
             árbol.entrena(X_bs, y_bs)
 
+            # Una vez entrenado lo añadimos a la lista de árboles
             self.arboles.append(árbol)
 
     def clasifica(self, X):
@@ -1049,26 +1052,36 @@ class RandomForest:
         n_ejemplos = X.shape[0]
         n_trees = len(self.arboles)
         
+        # Array de predicciones de cada árbol para todas las muestras
         preds_por_arbol = [árbol.clasifica(X) for árbol in self.arboles] 
 
+        # Inicializamos array de predicciones vacío
         preds_final = np.empty(shape=(n_ejemplos,), dtype=object) 
+
+        # Por cada muestra
         for i in range(n_ejemplos):
+            # Extraemos los votos de cada árbol para esa misma muestra mediante el bucle for en el array "preds_por_arbol"
             votos = [preds_por_arbol[t][i] for t in range(n_trees)] 
 
+            # Inicializamos un diccionario formado por la clave: clase y valor: número de muestras por esa clase
             conteo = {}
             for voto in votos:
+                # Si ya ha visto esa clase en el diccionario únicamente añadimos 1 al número total
                 if voto in conteo:
                     conteo[voto] += 1
                 else:
+                    # Si todavía no ha incluído esa clase, ponemos un uno en su posición
                     conteo[voto] = 1
 
             clase_pred = None
             max_cuenta = -1
+            # Seleccionamos la clase con más votos
             for clase, cuenta in conteo.items():
                 if cuenta > max_cuenta:
                     max_cuenta = cuenta
                     clase_pred = clase
 
+            # Añadimos esa clase como predicción en el array de predicciones
             preds_final[i] = clase_pred 
 
         return preds_final
@@ -1126,12 +1139,15 @@ import pandas as pd
 # * X_train_credito, y_train_credito, X_test_credito, y_test_credito
 #   conteniendo el dataset de crédito con los atributos numñericos:
 
+# Ininicalizamos el ordinalEncoder
 encoder_cred = OrdinalEncoder()
 
 X_credito_enc = encoder_cred.fit_transform(X_credito)  
 
+# Dividimos en 80% entrenamiento (entrenamiento + validación) y 20% prueba
 Xe_cred, Xp_cred, ye_cred, yp_cred = particion_entr_prueba(X_credito_enc, y_credito, test=0.20)
 
+# Dividimos en 75% entrenamiento y 25% validación, es decir, 60 % entrenamiento, 20% validación y 20% prueba  
 Xe_cred_ent, Xe_cred_val, ye_cred_ent, ye_cred_val = particion_entr_prueba(Xe_cred, ye_cred, test=0.25)
 
 
@@ -1140,13 +1156,15 @@ Xe_cred_ent, Xe_cred_val, ye_cred_ent, ye_cred_val = particion_entr_prueba(Xe_cr
 
 df_adult = pd.read_csv("datos/adultDataset.csv")
 
+# Todas las muestras menos las pertenecientes a la última columna que es la variable a predecir
 X_adult = df_adult.iloc[:, :-1].to_numpy()   
 y_adult = df_adult.iloc[:, -1].to_numpy()   
 
+# Misma división que en crédito
 Xe_adult, Xp_adult, ye_adult, yp_adult = particion_entr_prueba(X_adult, y_adult, test=0.20)
-
 Xe_adult_ent, Xe_adult_val, ye_adult_ent, ye_adult_val = particion_entr_prueba(Xe_adult, ye_adult, test=0.25)
 
+# Como pide el enunciado, las primeras 4 columnas son numéricas y las restantes de tipo categórico por lo que los dividimos
 X_ent_num = Xe_adult_ent[:, :4].astype(float)
 X_ent_cat = Xe_adult_ent[:, 4:]
 
@@ -1156,13 +1174,17 @@ X_val_cat = Xe_adult_val[:, 4:]
 X_test_num = Xp_adult[:, :4].astype(float)
 X_test_cat = Xp_adult[:, 4:]
 
+# Inicializamos el ordinalEncoder con "handle_unknown" y "unknown_value=-1" para que las muestras que no conozca las codifique como -1.
 encoder_adult = OrdinalEncoder(handle_unknown='use_encoded_value',unknown_value=-1)
 
+# Aplicamos la codificación
 X_ent_cat_enc = encoder_adult.fit_transform(X_ent_cat)
 
 X_val_cat_enc  = encoder_adult.transform(X_val_cat)
 X_test_cat_enc = encoder_adult.transform(X_test_cat)
 
+# Por último, unimos las columnas numéricas y categóricas de cada conjunto de datos mediante el método "np.hstack" que une las columnas 
+# horizontalmente
 X_train_adult = np.hstack([X_ent_num, X_ent_cat_enc])
 y_train_adult = ye_adult_ent
 
@@ -1176,26 +1198,45 @@ y_test_adult  = yp_adult
 # * X_train_dg, y_train_dg, X_valid_dg, y_valid_dg, X_test_dg, y_test_dg
 #   conteniendo el dataset de los dígitos escritos a mano:
 
+# Para preprocesar las imágenes de digits hemos definido dos funciones: 
+    # La primera procesa las imágenes y devuelve un array [i, 28*28] donde i es cada imagen con su vector de 1D aplanado con 1s y 0s
+    # La segunda devuelve un array con todas las etiquetas
+
+# Como parámetros le pasamos el path de las imágenes ya sea de entrenamiento, validación o prueba y el número de ejemplos de cada una
 def lee_imagenes_digitos(path_imagenes, n_ejemplos):
 
+    # Creamos un array de 0s con filas = n_ejemplos y el tamañano de cada ejemplo = 28*28 (tamaño de cada imagen)
     X = np.zeros((n_ejemplos, 28*28), dtype=int)
 
+    # Abrimos el path de las imagenes
     with open(path_imagenes, 'r') as f:
-        for i in range(n_ejemplos):  
+        # Por cada imagen
+        for i in range(n_ejemplos):
+            # Inicializamos una lista de pixeles  
             pixeles = []
+            # Por cada fila de la imagen (en total 28)
             for _ in range(28): 
+                # Leemos la línea
                 linea = f.readline() 
 
                 if not linea:
                     raise ValueError(f"El fichero {path_imagenes} terminó antes de leer 28 líneas para la imagen {i}.")
                 
+                # La línea leída la pasamos a la variable fila pero eliminando los saltos de línea mediante el método "rstrip"
                 fila = linea.rstrip("\n")
+                # Una vez tenemos la fila sin saltos de línea, la recorremos con un bucle y sustituímos por un 1
+                #  si se encuentra con un carácter que no es un espacio en blanco (+ o *) o un 0 si es un espacio en blanco. 
+                # Por tanto la lista "pixeles" tendrá 728 caracteres que serán 1 o 0, es decir, la imagen aplanada.
                 pixeles.extend([0 if ch == ' ' else 1 for ch in fila]) 
+                # Por último, añadimos al array X de la posición de la imagen i, el vector de 1D con todos los 1s y 0s.
             X[i, :] = np.array(pixeles, dtype=int) 
     return X
 
+# Ésta función devuelve un array de etiquetas a partir de un path de etiquetas
 def lee_labels_digitos(path_labels):
     with open(path_labels, 'r') as f:
+        # Por cada línea convierte el carácter que haya en un entero y borra todos los saltos de línea, tabulaciones, etc mediante el 
+        # método "strip"
         y = [int(l.strip()) for l in f.readlines()]                                                    
     return np.array(y, dtype=int) 
 
@@ -1203,6 +1244,7 @@ ruta_train_labels = "datos/digitdata/traininglabels"
 ruta_valid_labels = "datos/digitdata/validationlabels"
 ruta_test_labels  = "datos/digitdata/testlabels"
 
+# LLamamos a la función para que nos devuelva el array de etiquetas
 y_train_digitos = lee_labels_digitos(ruta_train_labels)
 y_valid_digitos = lee_labels_digitos(ruta_valid_labels)
 y_test_digitos  = lee_labels_digitos(ruta_test_labels)
@@ -1211,6 +1253,7 @@ n_train_d = y_train_digitos.shape[0]
 n_valid_d = y_valid_digitos.shape[0]
 n_test_d  = y_test_digitos.shape[0]
 
+# LLamamos a la función para obtener el array X
 X_train_digitos = lee_imagenes_digitos("datos/digitdata/trainingimages",   n_train_d)
 X_valid_digitos = lee_imagenes_digitos("datos/digitdata/validationimages", n_valid_d)
 X_test_digitos  = lee_imagenes_digitos("datos/digitdata/testimages",       n_test_d)
@@ -1257,8 +1300,12 @@ X_test_dg,  y_test_dg  = X_test_digitos,   y_test_digitos
 
 #-- CRÉDITO --
 
+# Dividimos en entrenamiento, validación y prueba con la función "particion_entr_prueba"
+
 # Xe_cred, Xp_cred, ye_cred, yp_cred = particion_entr_prueba(X_credito_enc, y_credito, test=0.20)
 # Xe_cred_ent, Xe_cred_val, ye_cred_ent, ye_cred_val = particion_entr_prueba(Xe_cred, ye_cred, test=0.25)
+
+# Definimos el grid de valores para calcular la mejor combinación
 
 # lista_n_arboles     = [10, 20]
 # lista_prop_muestras = [0.6, 0.8, 1.0]
@@ -1269,6 +1316,8 @@ X_test_dg,  y_test_dg  = X_test_digitos,   y_test_digitos
 
 # mejor_comb         = None
 # mejor_rend_val     = 0.0
+
+# Gridsearch con todos los valores posibles
 
 # for n_ar in lista_n_arboles:
 #     for pm in lista_prop_muestras:
@@ -1284,6 +1333,7 @@ X_test_dg,  y_test_dg  = X_test_digitos,   y_test_digitos
 #                             n_atrs=na,
 #                             prop_umbral=pu
 #                         )
+#                         # Por cada árbol con los diferentes valores calculamos el rendimiento y elegimos el que devuelva el mejor
 #                         rf.entrena(Xe_cred_ent, ye_cred_ent)
 #                         rend_val = rendimiento(rf, Xe_cred_val, ye_cred_val)
 #                         if rend_val > mejor_rend_val:
@@ -1302,13 +1352,14 @@ X_test_dg,  y_test_dg  = X_test_digitos,   y_test_digitos
 #     n_atrs=na,
 #     prop_umbral=pu
 # )
+# # Unimos el entrenamiento y validación para entrenar de forma definitiva el mejor clasificador
 # Xcred_ent_val = np.vstack((Xe_cred_ent, Xe_cred_val))
 # ycred_ent_val = np.hstack((ye_cred_ent, ye_cred_val))
 # RF_CREDITO.entrena(Xcred_ent_val, ycred_ent_val)
 # print("Rendimiento RF sobre crédito (entren+valid → prueba):", rendimiento(RF_CREDITO, Xp_cred, yp_cred))
 # print("\n")
 
-
+#  TODOS LOS SIGUIENTES ENTRENAMIENTOS DE DATASETS FORMAN LA MISMA ESTRUCTURA CON GRIDSEARCH CON VALIDACIÓN
 
 # # -- ADULTDATASET --
 
@@ -1586,10 +1637,11 @@ print("Estratificación entrenamiento crédito: ",np.unique(ye_credito,return_co
 print("Estratificación prueba crédito: ",np.unique(yp_credito,return_counts=True))
 print("\n\n\n")
 
-# X_train_iris, X_test_iris, y_train_iris, y_test_iris = particion_entr_prueba(X_iris, y_iris, test=0.2)
-# print("Estratificación entrenamiento iris: ",np.unique(y_train_iris,return_counts=True))
-# print("Estratificación prueba iris: ",np.unique(y_test_iris,return_counts=True))
-# print("\n\n\n")
+# Hemos añadido la partición en entreamiento y prueba del conjunto de datos Iris
+X_train_iris, X_test_iris, y_train_iris, y_test_iris = particion_entr_prueba(X_iris, y_iris, test=0.2)
+print("Estratificación entrenamiento iris: ",np.unique(y_train_iris,return_counts=True))
+print("Estratificación prueba iris: ",np.unique(y_test_iris,return_counts=True))
+print("\n\n\n")
 
 
 print("************ PRUEBAS EJERCICIO 2:")
