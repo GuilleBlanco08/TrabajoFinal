@@ -1722,7 +1722,7 @@ print("==== MEJOR RENDIMIENTO RANDOM FOREST SOBRE CRÉDITO:")
 RF_CREDITO=RandomForest(n_arboles=10, prop_muestras=0.8, min_ejemplos_nodo_interior=5, max_prof=10, n_atrs=10, prop_umbral=0.8) 
 RF_CREDITO.entrena(Xe_cred_ent, ye_cred_ent) 
 print("Rendimiento RF entrenamiento sobre crédito: ",rendimiento(RF_CREDITO,Xe_cred_ent, ye_cred_ent))
-print("Rendimiento RF  test sobre crédito: ",rendimiento(RF_CREDITO,Xe_cred_val, ye_cred_val))
+print("Rendimiento RF  test sobre crédito: ",rendimiento(RF_CREDITO,Xp_credito, yp_credito))
 print("\n")
 
 
